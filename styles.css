@@ -7,6 +7,8 @@
   --board-grad-b: #0f1b33;
   --cell-size: 30px;
   --cell-gap: 2px;
+  --preview-scale: 0.65;
+  --preview-cell-size: calc(var(--cell-size) * var(--preview-scale));
   --radius: 12px;
   --shadow-elev-1: 0 6px 12px rgba(0,0,0,0.35);
   --shadow-elev-2: 0 18px 40px rgba(0,0,0,0.45);
@@ -87,6 +89,7 @@ body {
 }
 
 #scale-root {
+  position: relative;
   transform-origin: top center;
 }
 
@@ -148,12 +151,21 @@ body {
   background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
   box-shadow: var(--shadow-elev-1);
 }
-#preview, #hold {
-  width: 140px;
-  height: 140px;
+#preview {
   display: grid;
-  grid-template-columns: repeat(4, var(--cell-size));
-  grid-template-rows: repeat(4, var(--cell-size));
+  gap: 8px;
+}
+.preview-slot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.preview-grid, #hold {
+  width: 120px;
+  height: 120px;
+  display: grid;
+  grid-template-columns: repeat(4, var(--preview-cell-size));
+  grid-template-rows: repeat(4, var(--preview-cell-size));
   gap: var(--cell-gap);
   place-items: center;
   justify-content: center;
@@ -162,14 +174,66 @@ body {
   transition: opacity var(--speed-slow);
 }
 .preview-cell {
-  width: var(--cell-size);
-  height: var(--cell-size);
+  width: var(--preview-cell-size);
+  height: var(--preview-cell-size);
   border-radius: 6px;
   background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
 }
 #hold-wrap.cooldown { opacity: 0.7; }
 #hold-wrap.active { box-shadow: 0 0 0 2px rgba(108,230,255,0.4), var(--shadow-elev-1); }
 #preview-wrap.active { box-shadow: 0 0 0 2px rgba(108,230,255,0.35), var(--shadow-elev-1); }
+
+#overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at 50% 40%, rgba(15,23,42,0.98), rgba(3,7,18,0.9));
+  backdrop-filter: blur(6px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--speed-slow);
+  z-index: 10;
+}
+#overlay.visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+.overlay-inner {
+  min-width: 260px;
+  padding: 24px 28px;
+  border-radius: 16px;
+  border: var(--border);
+  background: linear-gradient(180deg, rgba(15,23,42,0.98), rgba(15,23,42,0.94));
+  box-shadow: var(--shadow-elev-2);
+  display: grid;
+  gap: 16px;
+  text-align: center;
+}
+.overlay-title {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  text-shadow: 0 4px 18px rgba(0,0,0,0.8);
+}
+.overlay-summary {
+  display: grid;
+  gap: 8px;
+}
+.overlay-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.overlay-row .label {
+  color: var(--muted);
+}
+.overlay-restart {
+  font-size: 16px;
+  font-weight: 600;
+}
 
 #info {
   display: grid;

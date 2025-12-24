@@ -58,6 +58,26 @@
       <footer class="bottombar">
         <div class="hint">Keys: ← → ↓ soft, ↑ rotate, Space hard, Shift alt-rotate, C hold</div>
       </footer>
+      <div id="overlay" aria-hidden="true">
+        <div class="overlay-inner">
+          <div class="overlay-title">Game Over</div>
+          <div class="overlay-summary">
+            <div class="overlay-row">
+              <span class="label">Score</span>
+              <span id="summary-score">0</span>
+            </div>
+            <div class="overlay-row">
+              <span class="label">Lines</span>
+              <span id="summary-lines">0</span>
+            </div>
+            <div class="overlay-row">
+              <span class="label">Level</span>
+              <span id="summary-level">1</span>
+            </div>
+          </div>
+          <button id="restart-btn" type="button" class="control-btn overlay-restart">Restart</button>
+        </div>
+      </div>
     </div>
   </main>
   <script src="script.js" defer></script>

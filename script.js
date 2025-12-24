@@ -17,6 +17,11 @@ const levelEl = byId("level");
 const achievementsEl = byId("achievements");
 const pauseBtn = byId("pause-btn");
 const startBtn = byId("start-btn");
+const overlayEl = byId("overlay");
+const restartBtn = byId("restart-btn");
+const summaryScoreEl = byId("summary-score");
+const summaryLinesEl = byId("summary-lines");
+const summaryLevelEl = byId("summary-level");
 const particlesCanvas = byId("particles");
 let particlesCtx;
 const scaleRoot = byId("scale-root");
@@ -45,7 +50,6 @@ window.addEventListener("resize", recalcScale);
 recalcScale();
 
 const makeCells = (container, rows, cols, cls) => {
-  container.innerHTML = "";
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       const d = document.createElement("div");
@@ -58,7 +62,17 @@ const makeCells = (container, rows, cols, cls) => {
 };
 
 makeCells(boardEl, H, W, "cell");
-makeCells(previewEl, 4, 4, "preview-cell");
+const previewGrids = [];
+for (let i = 0; i < 3; i++) {
+  const slot = document.createElement("div");
+  slot.className = "preview-slot";
+  const grid = document.createElement("div");
+  grid.className = "preview-grid";
+  slot.appendChild(grid);
+  previewEl.appendChild(slot);
+  makeCells(grid, 4, 4, "preview-cell");
+  previewGrids.push(grid);
+}
 makeCells(holdEl, 4, 4, "preview-cell");
 particlesCanvas.width = boardEl.clientWidth;
 particlesCanvas.height = boardEl.clientHeight;
@@ -238,14 +252,19 @@ class Renderer {
     }
   }
   drawPreview(type) {
-    const cells = Array.from(previewEl.children);
-    for (const c of cells) c.className = "preview-cell";
-    if (!type) return;
-    const shape = orientations[type][0];
-    for (const [dx,dy] of shape) {
-      const r = dy, c = dx;
-      const i = r * 4 + c;
-      cells[i].className = "preview-cell " + COLORS[type];
+    const list = Array.isArray(type) ? type : (type ? [type] : []);
+    for (let i = 0; i < previewGrids.length; i++) {
+      const grid = previewGrids[i];
+      const cells = Array.from(grid.children);
+      for (const c of cells) c.className = "preview-cell";
+      const pieceType = list[i];
+      if (!pieceType) continue;
+      const shape = orientations[pieceType][0];
+      for (const [dx,dy] of shape) {
+        const r = dy, c = dx;
+        const idx = r * 4 + c;
+        cells[idx].className = "preview-cell " + COLORS[pieceType];
+      }
     }
     previewEl.style.opacity = "0";
     previewEl.getBoundingClientRect();
@@ -316,7 +335,7 @@ class Game {
   }
   initDisplay() {
     this.renderer.drawBoard();
-    this.renderer.drawPreview(null);
+    this.renderer.drawPreview([]);
     this.renderer.drawHold(null);
     scoreEl.textContent = "0";
     linesEl.textContent = "0";
@@ -346,7 +365,7 @@ class Game {
       return;
     }
     if (this.queue.length === 0) this.queue = bagRandom();
-    this.renderer.drawPreview(this.queue[0]);
+    this.renderer.drawPreview(this.queue.slice(0, 3));
   }
   reset() {
     this.board = new Board(W,H);
@@ -367,6 +386,10 @@ class Game {
     this.pendingAutoDrop = false;
     if (holdWrap) holdWrap.classList.remove("cooldown","active");
     this.renderer.drawHold(null);
+    if (overlayEl) {
+      overlayEl.classList.remove("visible");
+      overlayEl.setAttribute("aria-hidden","true");
+    }
   }
   ticksForLevel() {
     const base = BASE_GRAVITY_MS;
@@ -428,7 +451,7 @@ class Game {
     this.holdAvailable = false;
     if (holdWrap) { holdWrap.classList.add("cooldown","active"); setTimeout(()=>{ holdWrap.classList.remove("active"); }, 220); }
     this.renderer.drawHold(this.holdPiece);
-    this.renderer.drawPreview(this.queue[0]);
+    this.renderer.drawPreview(this.queue.slice(0, 3));
     playTone(220, 120, 0.06);
   }
   holdRelease() {
@@ -479,6 +502,13 @@ class Game {
       }
     });
     if (startBtn) startBtn.addEventListener("click", () => { this.start(); });
+    if (restartBtn) restartBtn.addEventListener("click", () => {
+      if (overlayEl) {
+        overlayEl.classList.remove("visible");
+        overlayEl.setAttribute("aria-hidden","true");
+      }
+      this.start();
+    });
     const touchpad = byId("touchpad");
     const zoneAction = (el) => el?.dataset?.action;
     let swipeStart = null;
@@ -561,6 +591,13 @@ class Game {
       this.isPaused = true;
       const summary = `Game Over — Score ${this.score} • Lines ${this.lines} • Level ${this.level}`;
       achievementsEl.textContent = summary;
+      if (summaryScoreEl) summaryScoreEl.textContent = String(this.score);
+      if (summaryLinesEl) summaryLinesEl.textContent = String(this.lines);
+      if (summaryLevelEl) summaryLevelEl.textContent = String(this.level);
+      if (overlayEl) {
+        overlayEl.classList.add("visible");
+        overlayEl.setAttribute("aria-hidden","false");
+      }
       this.active = null;
       if (pauseBtn) { pauseBtn.setAttribute("aria-pressed","false"); pauseBtn.textContent = "Pause"; }
       this.renderer.drawBoard();
