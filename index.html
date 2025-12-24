@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RogueTris</title>
+  <link rel="preload" href="styles.css" as="style">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main id="app">
+    <div id="scale-root">
+      <header class="topbar">
+        <h1 aria-label="Game title">RogueTris</h1>
+        <div class="top-controls">
+          <button id="start-btn" type="button" aria-label="Start game" class="control-btn">Start</button>
+          <button id="pause-btn" type="button" aria-pressed="false" aria-label="Pause or play" class="control-btn">Pause</button>
+        </div>
+      </header>
+      <section id="game" aria-label="Tetris game area">
+        <div id="board-wrap">
+          <div id="board" role="grid" aria-label="Tetris board" aria-rowcount="20" aria-colcount="10"></div>
+          <canvas id="particles" aria-hidden="true"></canvas>
+        </div>
+        <aside id="sidebar" aria-label="Game information">
+          <div id="preview-wrap" aria-label="Next piece preview">
+            <div id="preview-title">Next</div>
+            <div id="preview" role="img" aria-label="Next tetromino"></div>
+          </div>
+          <div id="hold-wrap" aria-label="Hold piece area">
+            <div id="hold-title">Hold</div>
+            <div id="hold" role="img" aria-label="Held tetromino"></div>
+          </div>
+          <div id="info">
+            <div class="metric">
+              <div class="label">Score</div>
+              <div id="score" aria-live="polite">0</div>
+            </div>
+            <div class="metric">
+              <div class="label">Lines</div>
+              <div id="lines" aria-live="polite">0</div>
+            </div>
+            <div class="metric">
+              <div class="label">Level</div>
+              <div id="level" aria-live="polite">1</div>
+            </div>
+            <div id="achievements" aria-live="polite" aria-atomic="true"></div>
+          </div>
+        </aside>
+      </section>
+      <section id="touchpad" aria-label="Touch controls">
+        <div class="zone left" data-action="left"></div>
+        <div class="zone rotate" data-action="rotate"></div>
+        <div class="zone right" data-action="right"></div>
+        <div class="zone drop" data-action="soft-drop"></div>
+        <div class="zone hold" data-action="hold"></div>
+      </section>
+      <footer class="bottombar">
+        <div class="hint">Keys: ← → ↓ soft, ↑ rotate, Space hard, Shift alt-rotate, C hold</div>
+      </footer>
+    </div>
+  </main>
+  <script src="script.js" defer></script>
+</body>
+<noscript>This game requires JavaScript enabled.</noscript>
+</html>
