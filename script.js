@@ -188,11 +188,10 @@ class Board {
     for (let r = this.h - 1; r >= 0; r--) {
       if (this.grid[r].every(v => v)) {
         cleared.push(r);
+        this.grid.splice(r, 1);
+        this.grid.unshift(Array(this.w).fill(0));
+        r++;
       }
-    }
-    for (const r of cleared) {
-      this.grid.splice(r, 1);
-      this.grid.unshift(Array(this.w).fill(0));
     }
     return cleared;
   }
