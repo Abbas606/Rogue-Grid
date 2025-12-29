@@ -83,9 +83,9 @@ body {
 #game {
   width: min(1100px, 96vw);
   display: grid;
-  grid-template-columns: 1fr 320px;
+  grid-template-columns: 220px minmax(0, 1fr) 320px;
   gap: 24px;
-  align-items: center;
+  align-items: flex-start;
 }
 
 #scale-root {
@@ -97,6 +97,59 @@ body {
   position: relative;
   display: grid;
   place-items: center;
+}
+
+#controls-settings {
+  align-self: stretch;
+}
+.controls-card {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  border-radius: var(--radius);
+  border: var(--border);
+  background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
+  box-shadow: var(--shadow-elev-1);
+}
+.controls-title {
+  font-weight: 600;
+}
+.controls-group {
+  display: grid;
+  gap: 4px;
+}
+.controls-options {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 13px;
+}
+.controls-group select {
+  padding: 4px 6px;
+  border-radius: 6px;
+  border: var(--border);
+  background: rgba(15,23,42,0.9);
+  color: var(--fg);
+}
+
+#combo-visual {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  color: var(--accent);
+  font-size: 28px;
+  font-weight: 700;
+  text-shadow: 0 4px 16px rgba(0,0,0,0.8);
+  opacity: 0;
+  transform: translateY(10px) scale(0.9);
+  transition: opacity var(--speed-slow), transform var(--speed-slow);
+}
+#combo-visual.visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
 }
 
 #board {
@@ -153,11 +206,11 @@ body {
 }
 #preview,
 #hold {
-  width: 120px;
-  height: 120px;
+  width: 180px;
+  height: 180px;
   display: grid;
-  grid-template-columns: repeat(4, var(--preview-cell-size));
-  grid-template-rows: repeat(4, var(--preview-cell-size));
+  grid-template-columns: repeat(6, var(--preview-cell-size));
+  grid-template-rows: repeat(6, var(--preview-cell-size));
   gap: var(--cell-gap);
   place-items: center;
   justify-content: center;
@@ -245,7 +298,7 @@ body {
 }
 .metric { display: flex; align-items: baseline; justify-content: space-between; }
 .metric .label { color: var(--muted); }
-#achievements { min-height: 24px; color: var(--accent); }
+#achievements { display: none; }
 
 #touchpad {
   width: min(1100px, 96vw);
@@ -280,7 +333,8 @@ body {
     justify-items: center;
   }
   #sidebar { width: 100%; grid-template-columns: 1fr 1fr; }
-  #preview, #hold { width: 120px; height: 120px; }
+  #controls-settings { width: 100%; order: -1; }
+  #preview, #hold { width: 150px; height: 150px; }
 }
 
 @media (max-width: 700px) {

@@ -18,9 +18,40 @@
         </div>
       </header>
       <section id="game" aria-label="Tetris game area">
+        <aside id="controls-settings" aria-label="Controls settings">
+          <div class="controls-card">
+            <div class="controls-title">Controls</div>
+            <div class="controls-group">
+              <div class="label">Movement</div>
+              <div class="controls-options">
+                <label><input type="radio" name="move-scheme" value="arrows" checked> Arrows</label>
+                <label><input type="radio" name="move-scheme" value="wasd"> WASD</label>
+              </div>
+            </div>
+            <div class="controls-group">
+              <div class="label">Hold</div>
+              <select id="hold-key">
+                <option value="KeyQ">Q</option>
+                <option value="KeyC">C</option>
+                <option value="KeyZ">Z</option>
+                <option value="KeyX">X</option>
+              </select>
+            </div>
+            <div class="controls-group">
+              <div class="label">Release</div>
+              <select id="release-key">
+                <option value="KeyE">E</option>
+                <option value="KeyV">V</option>
+                <option value="KeyR">R</option>
+                <option value="KeyF">F</option>
+              </select>
+            </div>
+          </div>
+        </aside>
         <div id="board-wrap">
           <div id="board" role="grid" aria-label="Tetris board" aria-rowcount="20" aria-colcount="10"></div>
           <canvas id="particles" aria-hidden="true"></canvas>
+          <div id="combo-visual" aria-hidden="true"></div>
         </div>
         <aside id="sidebar" aria-label="Game information">
           <div id="preview-wrap" aria-label="Next piece preview">
@@ -55,9 +86,7 @@
         <div class="zone drop" data-action="soft-drop"></div>
         <div class="zone hold" data-action="hold"></div>
       </section>
-      <footer class="bottombar">
-        <div class="hint">Keys: ← → ↓ soft, ↑ rotate, Space hard, Shift alt-rotate, C hold</div>
-      </footer>
+      <footer class="bottombar"></footer>
       <div id="overlay" aria-hidden="true">
         <div class="overlay-inner">
           <div class="overlay-title">Game Over</div>
