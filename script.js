@@ -5,26 +5,9 @@ const H = 20;
 const LOCK_DELAY_MS = 500;
 const BASE_GRAVITY_MS = 1000;
 const SOFT_DROP_MS = 40;
-const COLORS = { 
-  // Monomino and Domino
-  m: "m", d: "d",
-  
-  // Trominoes
-  t1: "t1", t2: "t2",
-  
-  // Tetrominoes
-  i: "i", o: "o", t: "t", s: "s", z: "z", j: "j", l: "l",
-  
-  // Pentominoes
-  p1: "p1", p2: "p2", p3: "p3", p4: "p4", p5: "p5", p6: "p6", 
-  p7: "p7", p8: "p8", p9: "p9", p10: "p10", p11: "p11", p12: "p12",
-  
-  // Hexominoes
-  h1: "h1", h2: "h2", h3: "h3", h4: "h4", h5: "h5", h6: "h6",
-  h7: "h7", h8: "h8", h9: "h9", h10: "h10"
-};
+const COLORS = { i: "i", o: "o", t: "t", s: "s", z: "z", j: "j", l: "l" };
 
-const byId = function(id) { return document.getElementById(id); };
+const byId = (id) => document.getElementById(id);
 const boardEl = byId("board");
 const previewEl = byId("preview");
 const holdEl = byId("hold");
@@ -47,7 +30,7 @@ const controlsMovementRadios = document.querySelectorAll('input[name="move-schem
 const holdKeySelect = byId("hold-key");
 const releaseKeySelect = byId("release-key");
 let autoScale = 1;
-const computeAutoScale = function() {
+const computeAutoScale = () => {
   if (!scaleRoot) return 1;
   const prevTransform = scaleRoot.style.transform;
   scaleRoot.style.transform = "none";
@@ -59,7 +42,7 @@ const computeAutoScale = function() {
   scaleRoot.style.transform = prevTransform;
   return Math.max(0.5, s);
 };
-const applyScale = function(s) {
+const applyScale = (s) => {
   if (!scaleRoot) return;
   scaleRoot.style.transform = "scale(" + s + ")";
 };
@@ -83,8 +66,8 @@ const makeCells = (container, rows, cols, cls) => {
 };
 
 makeCells(boardEl, H, W, "cell");
-makeCells(previewEl, 6, 6, "preview-cell");
-makeCells(holdEl, 6, 6, "preview-cell");
+makeCells(previewEl, 4, 4, "preview-cell");
+makeCells(holdEl, 4, 4, "preview-cell");
 particlesCanvas.width = boardEl.clientWidth;
 particlesCanvas.height = boardEl.clientHeight;
 particlesCtx = particlesCanvas.getContext("2d");
@@ -107,37 +90,6 @@ const playTone = (freq, ms, gain = 0.06) => {
 };
 
 const orientations = {
-  // Monomino (1 square)
-  m: [
-    [[0,0]],
-    [[0,0]],
-    [[0,0]],
-    [[0,0]],
-  ],
-  
-  // Domino (2 squares)
-  d: [
-    [[0,0],[1,0]],
-    [[0,0],[0,1]],
-    [[0,0],[1,0]],
-    [[0,0],[0,1]],
-  ],
-  
-  // Trominoes (3 squares - 2 shapes)
-  t1: [ // Straight tromino
-    [[0,0],[1,0],[2,0]],
-    [[0,0],[0,1],[0,2]],
-    [[0,0],[1,0],[2,0]],
-    [[0,0],[0,1],[0,2]],
-  ],
-  t2: [ // L-tromino
-    [[0,0],[1,0],[0,1]],
-    [[0,0],[0,1],[1,1]],
-    [[1,0],[0,1],[1,1]],
-    [[0,0],[1,0],[1,1]],
-  ],
-  
-  // Tetrominoes (4 squares - 7 shapes)
   i: [
     [[0,1],[1,1],[2,1],[3,1]],
     [[2,0],[2,1],[2,2],[2,3]],
@@ -180,142 +132,6 @@ const orientations = {
     [[0,1],[1,1],[1,2],[2,2]],
     [[1,0],[0,1],[1,1],[0,2]],
   ],
-  
-  // Pentominoes (5 squares - 12 shapes)
-  p1: [ // F pentomino
-    [[1,0],[2,0],[0,1],[1,1],[1,2]],
-    [[0,0],[0,1],[1,1],[1,2],[2,1]],
-    [[1,0],[1,1],[2,1],[0,2],[1,2]],
-    [[0,1],[1,0],[1,1],[2,1],[2,2]],
-  ],
-  p2: [ // I pentomino
-    [[0,0],[1,0],[2,0],[3,0],[4,0]],
-    [[0,0],[0,1],[0,2],[0,3],[0,4]],
-    [[0,0],[1,0],[2,0],[3,0],[4,0]],
-    [[0,0],[0,1],[0,2],[0,3],[0,4]],
-  ],
-  p3: [ // L pentomino
-    [[0,0],[0,1],[0,2],[0,3],[1,3]],
-    [[0,0],[1,0],[2,0],[3,0],[0,1]],
-    [[0,0],[1,0],[1,1],[1,2],[1,3]],
-    [[2,0],[0,1],[1,1],[2,1],[3,1]],
-  ],
-  p4: [ // N pentomino
-    [[0,0],[1,0],[1,1],[1,2],[2,2]],
-    [[1,0],[2,0],[0,1],[1,1],[0,2]],
-    [[0,0],[0,1],[1,1],[2,1],[2,2]],
-    [[2,0],[0,1],[1,1],[1,2],[2,2]],
-  ],
-  p5: [ // P pentomino
-    [[0,0],[1,0],[0,1],[1,1],[0,2]],
-    [[0,0],[1,0],[2,0],[0,1],[1,1]],
-    [[1,0],[0,1],[1,1],[0,2],[1,2]],
-    [[0,0],[1,0],[2,0],[1,1],[2,1]],
-  ],
-  p6: [ // T pentomino
-    [[0,0],[1,0],[2,0],[1,1],[1,2]],
-    [[1,0],[0,1],[1,1],[2,1],[1,2]],
-    [[1,0],[0,1],[1,1],[2,1],[1,2]],
-    [[1,0],[1,1],[0,2],[1,2],[2,2]],
-  ],
-  p7: [ // U pentomino
-    [[0,0],[2,0],[0,1],[1,1],[2,1]],
-    [[0,0],[0,1],[0,2],[1,0],[1,2]],
-    [[0,0],[1,0],[2,0],[0,1],[2,1]],
-    [[0,0],[1,0],[0,2],[1,1],[1,2]],
-  ],
-  p8: [ // V pentomino
-    [[0,0],[1,0],[2,0],[2,1],[2,2]],
-    [[0,0],[0,1],[0,2],[1,2],[2,2]],
-    [[0,0],[0,1],[0,2],[1,0],[2,0]],
-    [[0,0],[1,0],[2,0],[2,1],[2,2]],
-  ],
-  p9: [ // W pentomino
-    [[0,0],[1,0],[1,1],[2,1],[2,2]],
-    [[1,0],[0,1],[1,1],[0,2],[1,2]],
-    [[0,0],[0,1],[1,1],[1,2],[2,2]],
-    [[1,0],[2,0],[0,1],[1,1],[0,2]],
-  ],
-  p10: [ // X pentomino
-    [[1,0],[0,1],[1,1],[2,1],[1,2]],
-    [[1,0],[0,1],[1,1],[2,1],[1,2]],
-    [[1,0],[0,1],[1,1],[2,1],[1,2]],
-    [[1,0],[0,1],[1,1],[2,1],[1,2]],
-  ],
-  p11: [ // Y pentomino
-    [[0,0],[1,0],[2,0],[3,0],[1,1]],
-    [[1,0],[0,1],[1,1],[1,2],[1,3]],
-    [[0,1],[1,1],[2,1],[3,1],[2,2]],
-    [[2,0],[1,1],[2,1],[2,2],[2,3]],
-  ],
-  p12: [ // Z pentomino
-    [[0,0],[1,0],[1,1],[1,2],[2,2]],
-    [[2,0],[0,1],[1,1],[2,1],[0,2]],
-    [[0,0],[0,1],[1,1],[2,1],[2,2]],
-    [[1,0],[2,0],[0,1],[1,1],[0,2]],
-  ],
-  
-  // Hexominoes (6 squares - 35 shapes, first 10 for demonstration)
-  h1: [ // Straight hexomino
-    [[0,0],[1,0],[2,0],[3,0],[4,0],[5,0]],
-    [[0,0],[0,1],[0,2],[0,3],[0,4],[0,5]],
-    [[0,0],[1,0],[2,0],[3,0],[4,0],[5,0]],
-    [[0,0],[0,1],[0,2],[0,3],[0,4],[0,5]],
-  ],
-  h2: [ // L hexomino
-    [[0,0],[0,1],[0,2],[0,3],[0,4],[1,4]],
-    [[0,0],[1,0],[2,0],[3,0],[4,0],[0,1]],
-    [[0,0],[1,0],[1,1],[1,2],[1,3],[1,4]],
-    [[3,0],[0,1],[1,1],[2,1],[3,1],[4,1]],
-  ],
-  h3: [ // T hexomino
-    [[0,0],[1,0],[2,0],[3,0],[1,1],[1,2]],
-    [[1,0],[0,1],[1,1],[2,1],[1,2],[1,3]],
-    [[2,0],[1,1],[2,1],[3,1],[0,2],[1,2]],
-    [[1,0],[1,1],[0,2],[1,2],[2,2],[1,3]],
-  ],
-  h4: [ // Cross hexomino
-    [[1,0],[0,1],[1,1],[2,1],[1,2],[1,3]],
-    [[1,0],[0,1],[1,1],[2,1],[1,2],[1,3]],
-    [[1,0],[0,1],[1,1],[2,1],[1,2],[1,3]],
-    [[1,0],[0,1],[1,1],[2,1],[1,2],[1,3]],
-  ],
-  h5: [ // Skew hexomino
-    [[0,0],[1,0],[1,1],[2,1],[3,1],[3,2]],
-    [[2,0],[0,1],[1,1],[2,1],[0,2],[1,2]],
-    [[0,0],[0,1],[1,1],[2,1],[2,2],[3,2]],
-    [[1,0],[2,0],[0,1],[1,1],[0,2],[1,2]],
-  ],
-  h6: [ // Chair hexomino
-    [[0,0],[1,0],[2,0],[0,1],[0,2],[1,2]],
-    [[0,0],[1,0],[0,1],[0,2],[1,2],[2,2]],
-    [[1,0],[2,0],[0,1],[1,1],[0,2],[1,2]],
-    [[0,0],[1,0],[1,1],[2,1],[1,2],[2,2]],
-  ],
-  h7: [ // Worm hexomino
-    [[0,0],[1,0],[1,1],[2,1],[2,2],[3,2]],
-    [[1,0],[0,1],[1,1],[0,2],[1,2],[0,3]],
-    [[0,0],[0,1],[1,1],[1,2],[2,2],[2,3]],
-    [[2,0],[1,1],[2,1],[1,2],[2,2],[1,3]],
-  ],
-  h8: [ // Lightning hexomino
-    [[0,0],[1,0],[1,1],[2,1],[3,1],[3,2]],
-    [[2,0],[0,1],[1,1],[2,1],[0,2],[1,2]],
-    [[0,0],[0,1],[1,1],[2,1],[2,2],[3,2]],
-    [[1,0],[2,0],[0,1],[1,1],[0,2],[1,2]],
-  ],
-  h9: [ // O hexomino
-    [[0,0],[1,0],[2,0],[0,1],[1,1],[2,1]],
-    [[0,0],[1,0],[0,1],[1,1],[0,2],[1,2]],
-    [[0,0],[1,0],[2,0],[0,1],[1,1],[2,1]],
-    [[0,0],[1,0],[0,1],[1,1],[0,2],[1,2]],
-  ],
-  h10: [ // P hexomino
-    [[0,0],[1,0],[2,0],[0,1],[1,1],[0,2]],
-    [[0,0],[1,0],[2,0],[2,1],[1,1],[2,2]],
-    [[1,0],[0,1],[1,1],[2,1],[0,2],[1,2]],
-    [[0,0],[0,1],[1,1],[2,1],[2,2],[1,2]],
-  ],
 };
 
 const SRS_JLSTZ_RIGHT = {
@@ -344,53 +160,18 @@ const SRS_I_LEFT = {
 };
 
 const bagRandom = () => {
-  // Create a weighted pool based on piece size (smaller pieces are more common)
-  const pieceWeights = {
-    // Monomino and Domino - very rare
-    m: 0.5, d: 1.0,
-    
-    // Trominoes - uncommon
-    t1: 2.0, t2: 2.0,
-    
-    // Tetrominoes - common
-    i: 3.0, o: 3.0, t: 3.0, s: 3.0, z: 3.0, j: 3.0, l: 3.0,
-    
-    // Pentominoes - somewhat rare
-    p1: 1.5, p2: 1.5, p3: 1.5, p4: 1.5, p5: 1.5, p6: 1.5,
-    p7: 1.5, p8: 1.5, p9: 1.5, p10: 1.5, p11: 1.5, p12: 1.5,
-    
-    // Hexominoes - rare
-    h1: 1.0, h2: 1.0, h3: 1.0, h4: 1.0, h5: 1.0, h6: 1.0,
-    h7: 1.0, h8: 1.0, h9: 1.0, h10: 1.0
-  };
-  
-  // Create weighted pool
-  const weightedPool = [];
-  for (const piece in pieceWeights) {
-    const weight = pieceWeights[piece];
-    for (let i = 0; i < weight; i++) {
-      weightedPool.push(piece);
-    }
-  }
-  
-  // Shuffle the weighted pool
-  for (let i = weightedPool.length - 1; i > 0; i--) {
+  const pool = ["i","o","t","s","z","j","l"];
+  for (let i = pool.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    const temp = weightedPool[i];
-    weightedPool[i] = weightedPool[j];
-    weightedPool[j] = temp;
+    [pool[i], pool[j]] = [pool[j], pool[i]];
   }
-  
-  return weightedPool;
+  return pool;
 };
 
 class Board {
   constructor(w, h) {
     this.w = w; this.h = h;
-    this.grid = [];
-    for (let i = 0; i < h; i++) {
-      this.grid.push(Array(w).fill(0));
-    }
+    this.grid = Array.from({ length: h }, () => Array(w).fill(0));
   }
   get(r, c) {
     if (r < 0 || r >= this.h || c < 0 || c >= this.w) return null;
@@ -401,8 +182,7 @@ class Board {
     this.grid[r][c] = v;
   }
   mergePiece(piece) {
-    for (const block of piece.blocks()) {
-      const dx = block[0], dy = block[1];
+    for (const [dx, dy] of piece.blocks()) {
       const r = piece.y + dy, c = piece.x + dx;
       if (r >= 0) this.set(r, c, piece.type);
     }
@@ -410,7 +190,7 @@ class Board {
   clearLines() {
     const cleared = [];
     for (let r = this.h - 1; r >= 0; r--) {
-      if (this.grid[r].every(function(v) { return v; })) {
+      if (this.grid[r].every(v => v)) {
         cleared.push(r);
         this.grid.splice(r, 1);
         this.grid.unshift(Array(this.w).fill(0));
@@ -425,38 +205,12 @@ class Piece {
   constructor(type) {
     this.type = type;
     this.rot = 0;
-    
-    // Calculate initial position based on piece size to center it properly
-    const shape = orientations[type][0];
-    const minX = shape.reduce((min, block) => Math.min(min, block[0]), 0);
-    const maxX = shape.reduce((max, block) => Math.max(max, block[0]), 0);
-    const width = maxX - minX + 1;
-    
-    // Center the piece horizontally
-    this.x = Math.floor((W - width) / 2) - minX;
-    
-    // Start position based on piece height (larger pieces start higher)
-    const minY = shape.reduce((min, block) => Math.min(min, block[1]), 0);
-    const maxY = shape.reduce((max, block) => Math.max(max, block[1]), 0);
-    const height = maxY - minY + 1;
-    this.y = -height - 1; // Start above the board
+    this.x = 3;
+    this.y = -2;
   }
-  
   shape() { return orientations[this.type][this.rot]; }
-  
   blocks(rot = this.rot, x = this.x, y = this.y) {
-    return orientations[this.type][rot].map(function(block) { return [block[0], block[1]]; });
-  }
-  
-  // Get the bounding box of the piece for collision detection
-  getBoundingBox() {
-    const shape = this.shape();
-    const minX = shape.reduce((min, block) => Math.min(min, block[0] + this.x), 0);
-    const maxX = shape.reduce((max, block) => Math.max(max, block[0] + this.x), 0);
-    const minY = shape.reduce((min, block) => Math.min(min, block[1] + this.y), 0);
-    const maxY = shape.reduce((max, block) => Math.max(max, block[1] + this.y), 0);
-    
-    return { minX, maxX, minY, maxY, width: maxX - minX + 1, height: maxY - minY + 1 };
+    return orientations[this.type][rot].map(([dx,dy]) => [dx,dy]);
   }
 }
 
@@ -481,8 +235,7 @@ class Renderer {
       this.cells[i].classList.remove("active");
     }
     this.prevActiveIdx.length = 0;
-    for (const block of piece.shape()) {
-      const dx = block[0], dy = block[1];
+    for (const [dx,dy] of piece.shape()) {
       const r = piece.y + dy, c = piece.x + dx;
       if (r >= 0 && r < H && c >= 0 && c < W) {
         const i = this.idx(r,c);
@@ -502,27 +255,11 @@ class Renderer {
       return;
     }
     const shape = orientations[type][0];
-    
-    // Center the piece in the 6x6 grid
-    const minX = shape.reduce(function(min, block) { return Math.min(min, block[0]); }, 0);
-    const maxX = shape.reduce(function(max, block) { return Math.max(max, block[0]); }, 0);
-    const minY = shape.reduce(function(min, block) { return Math.min(min, block[1]); }, 0);
-    const maxY = shape.reduce(function(max, block) { return Math.max(max, block[1]); }, 0);
-    const width = maxX - minX + 1;
-    const height = maxY - minY + 1;
-    
-    const offsetX = Math.floor((6 - width) / 2) - minX;
-    const offsetY = Math.floor((6 - height) / 2) - minY;
-    
-    for (const block of shape) {
-      const dx = block[0], dy = block[1];
-      const r = dy + offsetY, c = dx + offsetX;
-      const idx = r * 6 + c;
-      if (idx >= 0 && idx < cells.length) {
-        cells[idx].className = "preview-cell " + COLORS[type];
-      }
+    for (const [dx,dy] of shape) {
+      const r = dy, c = dx;
+      const idx = r * 4 + c;
+      cells[idx].className = "preview-cell " + COLORS[type];
     }
-  }
     previewEl.style.opacity = "0";
     previewEl.getBoundingClientRect();
     previewEl.style.transition = "opacity 200ms ease";
@@ -542,27 +279,11 @@ class Renderer {
     const type = piece.type;
     const rot = piece.rot || 0;
     const shape = orientations[type][rot];
-    
-    // Center the piece in the 6x6 grid
-    const minX = shape.reduce(function(min, block) { return Math.min(min, block[0]); }, 0);
-    const maxX = shape.reduce(function(max, block) { return Math.max(max, block[0]); }, 0);
-    const minY = shape.reduce(function(min, block) { return Math.min(min, block[1]); }, 0);
-    const maxY = shape.reduce(function(max, block) { return Math.max(max, block[1]); }, 0);
-    const width = maxX - minX + 1;
-    const height = maxY - minY + 1;
-    
-    const offsetX = Math.floor((6 - width) / 2) - minX;
-    const offsetY = Math.floor((6 - height) / 2) - minY;
-    
-    for (const block of shape) {
-      const dx = block[0], dy = block[1];
-      const r = dy + offsetY, c = dx + offsetX;
-      const i = r * 6 + c;
-      if (i >= 0 && i < cells.length) {
-        cells[i].className = "preview-cell " + COLORS[type];
-      }
+    for (const [dx,dy] of shape) {
+      const r = dy, c = dx;
+      const i = r * 4 + c;
+      cells[i].className = "preview-cell " + COLORS[type];
     }
-  }
     holdEl.style.opacity = "0";
     holdEl.getBoundingClientRect();
     holdEl.style.transition = "opacity 200ms ease";
@@ -683,8 +404,7 @@ class Game {
     return accel;
   }
   valid(piece, dx, dy, rot = piece.rot) {
-    for (const block of piece.blocks(rot)) {
-      const bx = block[0], by = block[1];
+    for (const [bx,by] of piece.blocks(rot)) {
       const r = piece.y + by + dy;
       const c = piece.x + bx + dx;
       if (c < 0 || c >= W || r >= H) return false;
@@ -709,8 +429,7 @@ class Game {
     const key = `${from}>${to}`;
     const type = this.active.type;
     const kicks = type === "i" ? (dir === 1 ? SRS_I_RIGHT[key] : SRS_I_LEFT[key]) : (dir === 1 ? SRS_JLSTZ_RIGHT[key] : SRS_JLSTZ_LEFT[key]);
-    for (const kick of kicks) {
-      const kx = kick[0], ky = kick[1];
+    for (const [kx, ky] of kicks) {
       if (this.valid(this.active, kx, ky, to)) {
         this.active.x += kx;
         this.active.y += ky;

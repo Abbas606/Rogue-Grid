@@ -206,11 +206,11 @@ body {
 }
 #preview,
 #hold {
-  width: 180px;
-  height: 180px;
+  width: 120px;
+  height: 120px;
   display: grid;
-  grid-template-columns: repeat(6, var(--preview-cell-size));
-  grid-template-rows: repeat(6, var(--preview-cell-size));
+  grid-template-columns: repeat(4, var(--preview-cell-size));
+  grid-template-rows: repeat(4, var(--preview-cell-size));
   gap: var(--cell-gap);
   place-items: center;
   justify-content: center;
@@ -334,7 +334,7 @@ body {
   }
   #sidebar { width: 100%; grid-template-columns: 1fr 1fr; }
   #controls-settings { width: 100%; order: -1; }
-  #preview, #hold { width: 150px; height: 150px; }
+  #preview, #hold { width: 120px; height: 120px; }
 }
 
 @media (max-width: 700px) {
