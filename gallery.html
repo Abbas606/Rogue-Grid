@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Polyomino Gallery</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    body {
+      background: #0a0f1d;
+    }
+    h1 {
+      text-align: center;
+      color: var(--accent);
+    }
+    #gallery-container {
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+      padding: 24px;
+      max-width: 1200px;
+      margin: 0 auto;
+      max-height: 80vh;
+      overflow-y: auto;
+    }
+    .group-title {
+      color: var(--accent);
+      margin-bottom: 16px;
+    }
+    .piece-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 24px;
+    }
+    .piece-card {
+      border: var(--border);
+      border-radius: var(--radius);
+      background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
+      box-shadow: var(--shadow-elev-1);
+      padding: 16px;
+      display: grid;
+      gap: 12px;
+      justify-items: center;
+    }
+    .piece-name {
+      font-weight: 600;
+      color: var(--fg);
+    }
+    .piece-preview {
+      width: 120px;
+      height: 120px;
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      grid-template-rows: repeat(6, 1fr);
+      gap: 2px;
+    }
+    .piece-preview .cell {
+      width: 100%;
+      height: 100%;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Polyomino Gallery</h1>
+  <div id="gallery-container"></div>
+
+  <script src="pieces.js"></script>
+  <script>
+    const galleryContainer = document.getElementById('gallery-container');
+
+    function createPieceCard(pieceName, pieceData) {
+      const card = document.createElement('div');
+      card.className = 'piece-card';
+
+      const nameEl = document.createElement('div');
+      nameEl.className = 'piece-name';
+      nameEl.textContent = pieceName;
+
+      const previewEl = document.createElement('div');
+      previewEl.className = 'piece-preview';
+      card.dataset.rotation = 0;
+
+      const shape = pieceData.shape;
+      const color = pieceData.color;
+      const w = shape[0].length;
+      const h = shape.length;
+      const startX = Math.floor((6 - w) / 2);
+      const startY = Math.floor((6 - h) / 2);
+
+      for (let r = 0; r < 6; r++) {
+        for (let c = 0; c < 6; c++) {
+          const cell = document.createElement('div');
+          cell.className = 'cell';
+          previewEl.appendChild(cell);
+        }
+      }
+
+      for (let r = 0; r < h; r++) {
+        for (let c = 0; c < w; c++) {
+          if (shape[r][c]) {
+            const idx = (startY + r) * 6 + (startX + c);
+            previewEl.children[idx].style.backgroundColor = color;
+          }
+        }
+      }
+
+      card.appendChild(nameEl);
+      card.appendChild(previewEl);
+      return card;
+    }
+
+    function rotateShape(shape, rotation) {
+      let rotated = shape;
+      for (let i = 0; i < rotation; i++) {
+        rotated = rotated[0].map((_, colIndex) => rotated.map(row => row[colIndex]).reverse());
+      }
+      return rotated;
+    }
+
+    function groupPolyominoes(pieces) {
+      const groups = {};
+      for (const pieceName in pieces) {
+        const piece = pieces[pieceName];
+        const size = piece.shape.flat().reduce((acc, val) => acc + val, 0);
+        if (!groups[size]) {
+          groups[size] = {};
+        }
+        groups[size][pieceName] = piece;
+      }
+      return groups;
+    }
+
+    const groupNames = {
+      1: 'Monominoes',
+      2: 'Dominoes',
+      3: 'Trominoes',
+      4: 'Tetrominoes',
+      5: 'Pentominoes',
+      6: 'Hexominoes'
+    };
+
+    const groupedPieces = groupPolyominoes(PIECES);
+
+    for (const size in groupedPieces) {
+      const groupContainer = document.createElement('div');
+      groupContainer.className = 'group-container';
+
+      const groupTitle = document.createElement('h2');
+      groupTitle.className = 'group-title';
+      groupTitle.textContent = groupNames[size];
+      groupContainer.appendChild(groupTitle);
+
+      const pieceGrid = document.createElement('div');
+      pieceGrid.className = 'piece-grid';
+
+      for (const pieceName in groupedPieces[size]) {
+        const pieceCard = createPieceCard(pieceName, groupedPieces[size][pieceName]);
+        pieceCard.addEventListener('click', () => {
+          const rotation = (parseInt(pieceCard.dataset.rotation) + 1) % 4;
+          pieceCard.dataset.rotation = rotation;
+          const shape = rotateShape(groupedPieces[size][pieceName].shape, rotation);
+          const previewEl = pieceCard.querySelector('.piece-preview');
+          const color = groupedPieces[size][pieceName].color;
+          const w = shape[0].length;
+          const h = shape.length;
+          const startX = Math.floor((6 - w) / 2);
+          const startY = Math.floor((6 - h) / 2);
+
+          for (let r = 0; r < 6; r++) {
+            for (let c = 0; c < 6; c++) {
+              const idx = r * 6 + c;
+              previewEl.children[idx].style.backgroundColor = '';
+            }
+          }
+
+          for (let r = 0; r < h; r++) {
+            for (let c = 0; c < w; c++) {
+              if (shape[r][c]) {
+                const idx = (startY + r) * 6 + (startX + c);
+                previewEl.children[idx].style.backgroundColor = color;
+              }
+            }
+          }
+        });
+        pieceGrid.appendChild(pieceCard);
+      }
+      groupContainer.appendChild(pieceGrid);
+      galleryContainer.appendChild(groupContainer);
+    }
+  </script>
+</body>
+</html>

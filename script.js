@@ -5,7 +5,6 @@ const H = 20;
 const LOCK_DELAY_MS = 500;
 const BASE_GRAVITY_MS = 1000;
 const SOFT_DROP_MS = 40;
-const COLORS = { i: "i", o: "o", t: "t", s: "s", z: "z", j: "j", l: "l" };
 
 const byId = (id) => document.getElementById(id);
 const boardEl = byId("board");
@@ -66,8 +65,8 @@ const makeCells = (container, rows, cols, cls) => {
 };
 
 makeCells(boardEl, H, W, "cell");
-makeCells(previewEl, 4, 4, "preview-cell");
-makeCells(holdEl, 4, 4, "preview-cell");
+makeCells(previewEl, 6, 6, "preview-cell");
+makeCells(holdEl, 6, 6, "preview-cell");
 particlesCanvas.width = boardEl.clientWidth;
 particlesCanvas.height = boardEl.clientHeight;
 particlesCtx = particlesCanvas.getContext("2d");
@@ -89,50 +88,6 @@ const playTone = (freq, ms, gain = 0.06) => {
   } catch (e) {}
 };
 
-const orientations = {
-  i: [
-    [[0,1],[1,1],[2,1],[3,1]],
-    [[2,0],[2,1],[2,2],[2,3]],
-    [[0,2],[1,2],[2,2],[3,2]],
-    [[1,0],[1,1],[1,2],[1,3]],
-  ],
-  o: [
-    [[1,0],[2,0],[1,1],[2,1]],
-    [[1,0],[2,0],[1,1],[2,1]],
-    [[1,0],[2,0],[1,1],[2,1]],
-    [[1,0],[2,0],[1,1],[2,1]],
-  ],
-  t: [
-    [[1,0],[0,1],[1,1],[2,1]],
-    [[1,0],[1,1],[2,1],[1,2]],
-    [[0,1],[1,1],[2,1],[1,2]],
-    [[1,0],[0,1],[1,1],[1,2]],
-  ],
-  j: [
-    [[0,0],[0,1],[1,1],[2,1]],
-    [[1,0],[2,0],[1,1],[1,2]],
-    [[0,1],[1,1],[2,1],[2,2]],
-    [[1,0],[1,1],[1,2],[0,2]],
-  ],
-  l: [
-    [[2,0],[0,1],[1,1],[2,1]],
-    [[1,0],[1,1],[1,2],[2,2]],
-    [[0,1],[1,1],[2,1],[0,2]],
-    [[0,0],[1,0],[1,1],[1,2]],
-  ],
-  s: [
-    [[1,0],[2,0],[0,1],[1,1]],
-    [[1,0],[1,1],[2,1],[2,2]],
-    [[1,1],[2,1],[0,2],[1,2]],
-    [[0,0],[0,1],[1,1],[1,2]],
-  ],
-  z: [
-    [[0,0],[1,0],[1,1],[2,1]],
-    [[2,0],[1,1],[2,1],[1,2]],
-    [[0,1],[1,1],[1,2],[2,2]],
-    [[1,0],[0,1],[1,1],[0,2]],
-  ],
-};
 
 const SRS_JLSTZ_RIGHT = {
   "0>1": [[0,0],[-1,0],[-1,1],[0,-2],[-1,-2]],
@@ -160,7 +115,7 @@ const SRS_I_LEFT = {
 };
 
 const bagRandom = () => {
-  const pool = ["i","o","t","s","z","j","l"];
+  const pool = Object.keys(PIECES);
   for (let i = pool.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [pool[i], pool[j]] = [pool[j], pool[i]];
@@ -207,10 +162,16 @@ class Piece {
     this.rot = 0;
     this.x = 3;
     this.y = -2;
+    this.center = PIECES[this.type].center || [Math.floor(PIECES[this.type].shape[0].length / 2), Math.floor(PIECES[this.type].shape.length / 2)];
   }
-  shape() { return orientations[this.type][this.rot]; }
+  shape() { return PIECES[this.type].shape; }
   blocks(rot = this.rot, x = this.x, y = this.y) {
-    return orientations[this.type][rot].map(([dx,dy]) => [dx,dy]);
+    let shape = this.shape();
+    for (let i = 0; i < rot; i++) {
+      shape = shape[0].map((_, colIndex) => shape.map(row => row[colIndex]).reverse());
+    }
+    const [cx, cy] = this.center;
+    return shape.map((row, r) => row.map((val, c) => val ? [c - cx, r - cy] : null)).flat().filter(Boolean);
   }
 }
 
@@ -226,7 +187,12 @@ class Renderer {
       for (let c = 0; c < W; c++) {
         const v = this.board.grid[r][c];
         const el = this.cells[this.idx(r,c)];
-        el.className = "cell" + (v ? " " + COLORS[v] : "");
+        el.className = 'cell';
+        if (v) {
+          el.style.backgroundColor = PIECES[v].color;
+        } else {
+          el.style.backgroundColor = '';
+        }
       }
     }
   }
@@ -235,18 +201,22 @@ class Renderer {
       this.cells[i].classList.remove("active");
     }
     this.prevActiveIdx.length = 0;
-    for (const [dx,dy] of piece.shape()) {
+    const color = PIECES[piece.type].color;
+    for (const [dx,dy] of piece.blocks()) {
       const r = piece.y + dy, c = piece.x + dx;
       if (r >= 0 && r < H && c >= 0 && c < W) {
         const i = this.idx(r,c);
-        this.cells[i].classList.add("active", COLORS[piece.type]);
+        this.cells[i].classList.add("active");
+        this.cells[i].style.backgroundColor = color;
         this.prevActiveIdx.push(i);
       }
     }
   }
   drawPreview(type) {
     const cells = Array.from(previewEl.children);
-    for (const c of cells) c.className = "preview-cell";
+    for (const c of cells) {
+      c.style.backgroundColor = '';
+    }
     if (!type) {
       previewEl.style.opacity = "0";
       previewEl.getBoundingClientRect();
@@ -254,11 +224,21 @@ class Renderer {
       previewEl.style.opacity = "1";
       return;
     }
-    const shape = orientations[type][0];
-    for (const [dx,dy] of shape) {
-      const r = dy, c = dx;
-      const idx = r * 4 + c;
-      cells[idx].className = "preview-cell " + COLORS[type];
+    const piece = new Piece(type);
+    const shape = piece.shape();
+    const color = PIECES[type].color;
+    const [cx, cy] = piece.center;
+    const w = shape[0].length;
+    const h = shape.length;
+    const startX = Math.floor((6 - w) / 2);
+    const startY = Math.floor((6 - h) / 2);
+    for (let r = 0; r < h; r++) {
+      for (let c = 0; c < w; c++) {
+        if (shape[r][c]) {
+          const idx = (startY + r) * 6 + (startX + c);
+          cells[idx].style.backgroundColor = color;
+        }
+      }
     }
     previewEl.style.opacity = "0";
     previewEl.getBoundingClientRect();
@@ -277,12 +257,19 @@ class Renderer {
       return;
     }
     const type = piece.type;
-    const rot = piece.rot || 0;
-    const shape = orientations[type][rot];
-    for (const [dx,dy] of shape) {
-      const r = dy, c = dx;
-      const i = r * 4 + c;
-      cells[i].className = "preview-cell " + COLORS[type];
+    const shape = PIECES[type].shape;
+    const color = PIECES[type].color;
+    const w = shape[0].length;
+    const h = shape.length;
+    const startX = Math.floor((6 - w) / 2);
+    const startY = Math.floor((6 - h) / 2);
+    for (let r = 0; r < h; r++) {
+      for (let c = 0; c < w; c++) {
+        if (shape[r][c]) {
+          const idx = (startY + r) * 6 + (startX + c);
+          cells[idx].style.backgroundColor = color;
+        }
+      }
     }
     holdEl.style.opacity = "0";
     holdEl.getBoundingClientRect();
@@ -354,6 +341,38 @@ class Game {
     if (pauseBtn) { pauseBtn.disabled = false; pauseBtn.setAttribute("aria-pressed","false"); pauseBtn.textContent = "Pause"; }
     this.lastTime = performance.now();
     requestAnimationFrame(this.loop);
+  }
+  loop(time) {
+    if (this.state === "paused" || this.state === "gameover") return;
+    const dt = time - this.lastTime;
+    this.lastTime = time;
+    this.update(dt);
+    this.renderer.drawBoard();
+    if (this.active) this.renderer.drawActive(this.active);
+    requestAnimationFrame(this.loop);
+  }
+  update(dt) {
+    if (this.state !== "playing") return;
+    if (this.isPaused) return;
+    const speed = this.softDropping ? SOFT_DROP_MS : this.ticksForLevel();
+    this.dropTimer += dt;
+    if (!this.active) {
+      this.renderer.drawBoard();
+      return;
+    }
+    const touching = !this.valid(this.active, 0, 1);
+    if (touching) {
+      this.lockTimer += dt;
+      if (this.lockTimer >= LOCK_DELAY_MS) {
+        this.lockPiece();
+      }
+    } else {
+      this.lockTimer = 0;
+      if (this.dropTimer >= speed) {
+        this.move(0, 1);
+        this.dropTimer = 0;
+      }
+    }
   }
   pullNext() {
     if (this.queue.length === 0) this.queue = bagRandom();
@@ -481,85 +500,40 @@ class Game {
     if (this.state !== "playing") return;
     if (!this.active) return;
     if (!this.holdAvailable) return;
+    const fromHold = this.holdPiece;
     this.holdPiece = this.active;
-    this.active = new Piece(this.pullNext());
+    this.active = fromHold ? new Piece(fromHold.type) : new Piece(this.pullNext());
     this.holdAvailable = false;
     this.renderer.drawHold(this.holdPiece);
     this.renderer.drawPreview(this.queue[0] || null);
     playTone(220, 120, 0.06);
+    if (holdWrap) holdWrap.classList.add("cooldown");
   }
   holdRelease() {
     if (this.state !== "playing") return;
     if (!this.holdPiece) return;
     if (!this.active) return;
-    if (!this.holdAvailable) return;
+    if (this.holdReturnPending) return;
     const fromHold = this.holdPiece;
     const replaced = this.active;
     this.active = fromHold;
     this.active.x = 3;
     this.active.y = -2;
     if (!this.valid(this.active, 0, 0, this.active.rot)) {
-      this.state = "gameover";
-      achievementsEl.textContent = "Game Over";
-      if (pauseBtn) {
-        pauseBtn.setAttribute("aria-pressed","false");
-        pauseBtn.textContent = "Pause";
-      }
+      this.active = replaced;
       return;
     }
     this.holdPiece = replaced;
     this.renderer.drawHold(this.holdPiece);
-    this.holdAvailable = false;
     this.holdReturnPending = true;
-    if (this.holdReturnTimer) {
-      clearTimeout(this.holdReturnTimer);
-      this.holdReturnTimer = null;
-    }
-    this.holdReturnTimer = setTimeout(() => {
-      this.returnFromHold();
+    if (holdWrap) holdWrap.classList.add("active");
+    setTimeout(() => {
+      this.holdReturnPending = false;
+      if (holdWrap) holdWrap.classList.remove("active");
     }, 500);
     playTone(440, 140, 0.06);
-    achievementsEl.textContent = "Hold Release";
   }
-  returnFromHold() {
-    if (!this.holdReturnPending) return;
-    if (this.state !== "playing") {
-      this.holdReturnPending = false;
-      if (this.holdReturnTimer) {
-        clearTimeout(this.holdReturnTimer);
-        this.holdReturnTimer = null;
-      }
-      return;
-    }
-    if (this.active) {
-      this.holdReturnTimer = setTimeout(() => {
-        this.returnFromHold();
-      }, 80);
-      return;
-    }
-    if (!this.holdPiece) {
-      this.holdReturnPending = false;
-      return;
-    }
-    this.holdReturnTimer = null;
-    this.active = this.holdPiece;
-    this.holdPiece = null;
-    this.holdReturnPending = false;
-    this.active.x = 3;
-    this.active.y = -2;
-    this.dropTimer = 0;
-    this.lockTimer = 0;
-    if (!this.valid(this.active, 0, 0, this.active.rot)) {
-      this.state = "gameover";
-      achievementsEl.textContent = "Game Over";
-      if (pauseBtn) {
-        pauseBtn.setAttribute("aria-pressed","false");
-        pauseBtn.textContent = "Pause";
-      }
-      return;
-    }
-    this.renderer.drawHold(null);
-  }
+
   bindInput() {
     window.addEventListener("keydown", (e) => {
       if (this.state !== "playing") return;
@@ -685,22 +659,28 @@ class Game {
       this.spawnParticles(cleared);
       if (cleared.length > 1) this.showCombo(cleared.length);
       const scores = {1:100,2:300,3:500,4:800};
-      const add = scores[cleared.length] || 0;
-      this.score += add * Math.max(1, this.combo + 1);
-      this.combo = this.combo >= 0 ? this.combo + 1 : 0;
+      const add = (scores[cleared.length] || 0) * this.level;
+      this.score += add;
+      this.combo++;
+      if (this.combo > 0) {
+        const comboBonus = 50 * this.combo * this.level;
+        this.score += comboBonus;
+        achievementsEl.textContent = `Combo x${this.combo}`;
+      }
       this.lines += cleared.length;
-      const prevLevel = this.level;
-      this.level = 1 + Math.floor(this.lines / 10);
+      const newLevel = 1 + Math.floor(this.lines / 10);
+      if (newLevel > this.level) {
+        this.level = newLevel;
+        tweenNumber(levelEl, this.level);
+        achievementsEl.textContent = "Level Up!";
+      }
       tweenNumber(scoreEl, this.score);
       tweenNumber(linesEl, this.lines);
-      if (this.level !== prevLevel) {
-        tweenNumber(levelEl, this.level);
-        achievementsEl.textContent = "Level " + this.level;
-      } else if (cleared.length === 4) {
-        achievementsEl.textContent = "Tetris!";
-      } else achievementsEl.textContent = "";
+      playTone(550, 50, 0.08);
+      playTone(660, 50, 0.08);
     } else {
       this.combo = -1;
+      achievementsEl.textContent = "";
     }
     if (this.board.grid[0].some(v => v)) {
       this.state = "gameover";
