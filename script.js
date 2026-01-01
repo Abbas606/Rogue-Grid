@@ -162,7 +162,9 @@ class Piece {
     this.rot = 0;
     this.x = 3;
     this.y = -2;
-    this.center = PIECES[this.type].center || [Math.floor(PIECES[this.type].shape[0].length / 2), Math.floor(PIECES[this.type].shape.length / 2)];
+    const def = PIECES[this.type];
+    this.cx = def.center ? def.center[0] : Math.floor(def.shape[0].length / 2);
+    this.cy = def.center ? def.center[1] : Math.floor(def.shape.length / 2);
   }
   shape() { return PIECES[this.type].shape; }
   blocks(rot = this.rot, x = this.x, y = this.y) {
@@ -170,8 +172,7 @@ class Piece {
     for (let i = 0; i < rot; i++) {
       shape = shape[0].map((_, colIndex) => shape.map(row => row[colIndex]).reverse());
     }
-    const [cx, cy] = this.center;
-    return shape.map((row, r) => row.map((val, c) => val ? [c - cx, r - cy] : null)).flat().filter(Boolean);
+    return shape.map((row, r) => row.map((val, c) => val ? [c, r] : null)).flat().filter(Boolean);
   }
 }
 
@@ -227,7 +228,6 @@ class Renderer {
     const piece = new Piece(type);
     const shape = piece.shape();
     const color = PIECES[type].color;
-    const [cx, cy] = piece.center;
     const w = shape[0].length;
     const h = shape.length;
     const startX = Math.floor((6 - w) / 2);
@@ -448,11 +448,35 @@ class Game {
     const key = `${from}>${to}`;
     const type = this.active.type;
     const kicks = type === "i" ? (dir === 1 ? SRS_I_RIGHT[key] : SRS_I_LEFT[key]) : (dir === 1 ? SRS_JLSTZ_RIGHT[key] : SRS_JLSTZ_LEFT[key]);
+
+    const baseShape = PIECES[type].shape;
+    const baseW = baseShape[0].length;
+    const baseH = baseShape.length;
+    let w, h;
+    if (from % 2 === 0) { w = baseW; h = baseH; } else { w = baseH; h = baseW; }
+
+    const cx = this.active.cx;
+    const cy = this.active.cy;
+    let ncx, ncy;
+    if (dir === 1) {
+      ncx = h - 1 - cy;
+      ncy = cx;
+    } else {
+      ncx = cy;
+      ncy = w - 1 - cx;
+    }
+    const shiftX = Math.round(cx - ncx);
+    const shiftY = Math.round(cy - ncy);
+
     for (const [kx, ky] of kicks) {
-      if (this.valid(this.active, kx, ky, to)) {
-        this.active.x += kx;
-        this.active.y += ky;
+      const tx = shiftX + kx;
+      const ty = shiftY + ky;
+      if (this.valid(this.active, tx, ty, to)) {
+        this.active.x += tx;
+        this.active.y += ty;
         this.active.rot = to;
+        this.active.cx = ncx;
+        this.active.cy = ncy;
         this.lockTimer = 0;
         return true;
       }
