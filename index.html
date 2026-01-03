@@ -50,6 +50,7 @@
           <div class="controls-card">
             <div class="controls-title">Piece Pool</div>
             <div id="pool-display" class="pool-grid"></div>
+            <button id="reset-pool-btn" class="control-btn small-btn" title="Reset to standard 7 pieces">Reset Pool</button>
           </div>
         </aside>
         <div id="board-wrap">
@@ -122,6 +123,16 @@
           <div class="overlay-title">Unlock New Piece</div>
           <div class="unlock-subtitle">Choose one to add to your current run:</div>
           <div id="unlock-options" class="unlock-options"></div>
+        </div>
+      </div>
+      <div id="confirm-overlay" aria-hidden="true" class="overlay-base">
+        <div class="overlay-inner">
+          <div class="overlay-title" style="font-size: 1.5rem; color: #ef4444; background: none; -webkit-text-fill-color: initial;">Reset Pool?</div>
+          <div class="unlock-subtitle" style="margin-bottom: 24px;">This will wipe your progress and revert to the standard 7 pieces. This cannot be undone.</div>
+          <div class="confirm-actions" style="display: flex; gap: 12px; justify-content: center;">
+            <button id="confirm-reset-btn" class="control-btn" style="background: #ef4444; color: white; width: auto; padding: 12px 24px;">Reset</button>
+            <button id="cancel-reset-btn" class="control-btn" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); width: auto; padding: 12px 24px;">Cancel</button>
+          </div>
         </div>
       </div>
     </div>

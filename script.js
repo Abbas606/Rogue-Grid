@@ -757,22 +757,32 @@ class Game {
       touchpad.addEventListener("touchcancel", () => { this.softDropping = false; swipeStart = null; }, { passive: true });
     }
   }
-  unlock() {
-    this.linesSinceUnlock -= this.unlockThreshold;
+  generateUnlockOptions(count = 3) {
     const available = Object.keys(PIECES).filter(p => !this.currentPool.includes(p));
-    if (available.length === 0) return;
-
-    this.state = "unlocking";
-    this.isPaused = true;
+    if (available.length === 0) return [];
 
     const options = [];
     const pool = [...available];
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < count; i++) {
       if (pool.length === 0) break;
       const idx = Math.floor(Math.random() * pool.length);
       options.push(pool[idx]);
       pool.splice(idx, 1);
     }
+    return options;
+  }
+
+  unlock(isReroll = false) {
+    if (!isReroll) {
+      this.linesSinceUnlock -= this.unlockThreshold;
+      this.rerollUsed = false;
+    }
+
+    const options = this.generateUnlockOptions(3);
+    if (options.length === 0) return;
+
+    this.state = "unlocking";
+    this.isPaused = true;
     this.showUnlockModal(options);
   }
 
@@ -780,6 +790,9 @@ class Game {
     const modal = document.getElementById('unlock-overlay');
     const container = document.getElementById('unlock-options');
     if (!modal || !container) return;
+
+    const oldBtn = modal.querySelector('.reroll-btn');
+    if (oldBtn) oldBtn.remove();
 
     container.innerHTML = '';
     const title = document.querySelector('#unlock-overlay .overlay-title');
@@ -801,14 +814,14 @@ class Game {
       const p = PIECES[type];
       const prev = document.createElement('div');
       prev.className = 'unlock-preview';
-      
+
       const mini = this.createMiniPiece(type, 8);
       mini.style.position = 'absolute';
       mini.style.top = '50%';
       mini.style.left = '50%';
       mini.style.transform = 'translate(-50%, -50%)';
       prev.appendChild(mini);
-      
+
       const label = document.createElement('div');
       label.className = 'unlock-title';
       label.textContent = type;
@@ -818,8 +831,29 @@ class Game {
       container.appendChild(card);
     });
 
+    if (!isPermanent && !this.rerollUsed) {
+      const btn = document.createElement('button');
+      btn.className = 'reroll-btn';
+      btn.textContent = 'Re-roll';
+      btn.onclick = () => this.handleReroll();
+      container.parentElement.appendChild(btn);
+    }
+
     modal.classList.add('visible');
     modal.setAttribute('aria-hidden', 'false');
+  }
+
+  handleReroll() {
+    this.rerollUsed = true;
+    this.unlock(true);
+  }
+
+  resetPermanentPool() {
+    this.permanentPool = [...STANDARD_PIECES];
+    this.savePool();
+    this.currentPool = [...this.permanentPool];
+    this.runUnlocks = [];
+    this.updatePoolDisplay();
   }
 
   handleUnlockSelection(type) {
@@ -1008,6 +1042,37 @@ class Game {
 }
 
 const game = new Game();
+
+const resetPoolBtn = document.getElementById("reset-pool-btn");
+const confirmOverlay = document.getElementById("confirm-overlay");
+const confirmResetBtn = document.getElementById("confirm-reset-btn");
+const cancelResetBtn = document.getElementById("cancel-reset-btn");
+
+if (resetPoolBtn && confirmOverlay) {
+  resetPoolBtn.addEventListener("click", () => {
+    confirmOverlay.classList.add("visible");
+    confirmOverlay.setAttribute("aria-hidden", "false");
+    game.isPaused = true;
+  });
+
+  if (confirmResetBtn) {
+    confirmResetBtn.addEventListener("click", () => {
+      game.resetPermanentPool();
+      confirmOverlay.classList.remove("visible");
+      confirmOverlay.setAttribute("aria-hidden", "true");
+      game.isPaused = false;
+    });
+  }
+
+  if (cancelResetBtn) {
+    cancelResetBtn.addEventListener("click", () => {
+      confirmOverlay.classList.remove("visible");
+      confirmOverlay.setAttribute("aria-hidden", "true");
+      game.isPaused = false;
+    });
+  }
+}
+
 if (document.readyState !== "loading") {
   if (pauseBtn) pauseBtn.disabled = true;
 } else {
