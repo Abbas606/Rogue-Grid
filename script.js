@@ -114,8 +114,10 @@ const SRS_I_LEFT = {
   "1>0": [[0,0],[-2,0],[1,0],[-2,-1],[1,2]],
 };
 
-const bagRandom = () => {
-  const pool = Object.keys(PIECES);
+const STANDARD_PIECES = ['I', 'O', 'T', 'L', 'J', 'S', 'Z'];
+
+const bagRandom = (source) => {
+  const pool = [...(source || Object.keys(PIECES))];
   for (let i = pool.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [pool[i], pool[j]] = [pool[j], pool[i]];
@@ -320,10 +322,83 @@ class Game {
     this.lockTimer = 0;
     this.softDropping = false;
     this.lastTime = performance.now();
+
+    // Unlock System
+    this.permanentPool = this.loadPool();
+    this.currentPool = [...this.permanentPool];
+    this.runUnlocks = [];
+    this.linesSinceUnlock = 0;
+    this.unlockThreshold = 10;
+
     this.loop = this.loop.bind(this);
     this.bindInput();
     this.initDisplay();
+    this.updatePoolDisplay();
   }
+
+  loadPool() {
+    try {
+      const saved = localStorage.getItem('rogueTris_pool');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        // Validate
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch(e) {}
+    return [...STANDARD_PIECES];
+  }
+
+  savePool() {
+    localStorage.setItem('rogueTris_pool', JSON.stringify(this.permanentPool));
+  }
+
+  createMiniPiece(type, blockSize = 4) {
+    const p = PIECES[type];
+    const shape = p.shape;
+    const w = shape[0].length;
+
+    const grid = document.createElement('div');
+    grid.style.display = 'grid';
+    grid.style.gridTemplateColumns = `repeat(${w}, ${blockSize}px)`;
+    grid.style.gap = '1px';
+
+    shape.forEach(row => {
+      row.forEach(cell => {
+        const cellDiv = document.createElement('div');
+        cellDiv.style.width = `${blockSize}px`;
+        cellDiv.style.height = `${blockSize}px`;
+        if (cell) {
+          cellDiv.style.backgroundColor = p.color;
+        }
+        grid.appendChild(cellDiv);
+      });
+    });
+    return grid;
+  }
+
+  updatePoolDisplay() {
+    const el = document.getElementById('pool-display');
+    if (!el) return;
+    el.innerHTML = '';
+    const sorted = [...this.currentPool].sort((a, b) => {
+      const isStdA = STANDARD_PIECES.includes(a);
+      const isStdB = STANDARD_PIECES.includes(b);
+      if (isStdA && !isStdB) return -1;
+      if (!isStdA && isStdB) return 1;
+      return a.localeCompare(b);
+    });
+
+    sorted.forEach(type => {
+      const div = document.createElement('div');
+      div.className = 'pool-item';
+      if (this.runUnlocks.includes(type)) div.classList.add('new');
+
+      div.title = type;
+      div.appendChild(this.createMiniPiece(type, 4));
+      el.appendChild(div);
+    });
+  }
+
   initDisplay() {
     this.renderer.drawBoard();
     this.renderer.drawPreview(null);
@@ -375,7 +450,7 @@ class Game {
     }
   }
   pullNext() {
-    if (this.queue.length === 0) this.queue = bagRandom();
+    if (this.queue.length === 0) this.queue = bagRandom(this.currentPool);
     return this.queue.shift();
   }
   spawn() {
@@ -384,20 +459,26 @@ class Game {
     if (!this.valid(this.active, 0, 0, this.active.rot)) {
       this.state = "gameover";
       achievementsEl.textContent = "Game Over";
-      if (pauseBtn) { pauseBtn.setAttribute("aria-pressed","false"); pauseBtn.textContent = "Pause"; }
+      if (pauseBtn) { pauseBtn.setAttribute("aria-pressed", "false"); pauseBtn.textContent = "Pause"; }
       return;
     }
-    if (this.queue.length === 0) this.queue = bagRandom();
+    if (this.queue.length === 0) this.queue = bagRandom(this.currentPool);
     this.renderer.drawPreview(this.queue[0] || null);
   }
   reset() {
-    this.board = new Board(W,H);
+    this.board = new Board(W, H);
     this.renderer = new Renderer(this.board);
     this.score = 0;
     this.lines = 0;
     this.level = 1;
     this.combo = -1;
     this.queue.length = 0;
+
+    this.currentPool = [...this.permanentPool];
+    this.runUnlocks = [];
+    this.linesSinceUnlock = 0;
+    this.updatePoolDisplay();
+
     this.spawn();
     tweenNumber(scoreEl, this.score);
     tweenNumber(linesEl, this.lines);
@@ -410,11 +491,11 @@ class Game {
       clearTimeout(this.holdReturnTimer);
       this.holdReturnTimer = null;
     }
-    if (holdWrap) holdWrap.classList.remove("cooldown","active");
+    if (holdWrap) holdWrap.classList.remove("cooldown", "active");
     this.renderer.drawHold(null);
     if (overlayEl) {
       overlayEl.classList.remove("visible");
-      overlayEl.setAttribute("aria-hidden","true");
+      overlayEl.setAttribute("aria-hidden", "true");
     }
   }
   ticksForLevel() {
@@ -676,6 +757,123 @@ class Game {
       touchpad.addEventListener("touchcancel", () => { this.softDropping = false; swipeStart = null; }, { passive: true });
     }
   }
+  unlock() {
+    this.linesSinceUnlock -= this.unlockThreshold;
+    const available = Object.keys(PIECES).filter(p => !this.currentPool.includes(p));
+    if (available.length === 0) return;
+
+    this.state = "unlocking";
+    this.isPaused = true;
+
+    const options = [];
+    const pool = [...available];
+    for (let i = 0; i < 3; i++) {
+      if (pool.length === 0) break;
+      const idx = Math.floor(Math.random() * pool.length);
+      options.push(pool[idx]);
+      pool.splice(idx, 1);
+    }
+    this.showUnlockModal(options);
+  }
+
+  showUnlockModal(options, isPermanent = false) {
+    const modal = document.getElementById('unlock-overlay');
+    const container = document.getElementById('unlock-options');
+    if (!modal || !container) return;
+
+    container.innerHTML = '';
+    const title = document.querySelector('#unlock-overlay .overlay-title');
+    const sub = document.querySelector('#unlock-overlay .unlock-subtitle');
+
+    if (isPermanent) {
+      title.textContent = "Run Complete!";
+      sub.textContent = "Choose one piece to KEEP permanently:";
+    } else {
+      title.textContent = "Unlock New Piece";
+      sub.textContent = "Choose one to add to your current run:";
+    }
+
+    options.forEach(type => {
+      const card = document.createElement('div');
+      card.className = 'unlock-card';
+      card.onclick = () => isPermanent ? this.handlePermanentSelection(type) : this.handleUnlockSelection(type);
+
+      const p = PIECES[type];
+      const prev = document.createElement('div');
+      prev.className = 'unlock-preview';
+      
+      const mini = this.createMiniPiece(type, 8);
+      mini.style.position = 'absolute';
+      mini.style.top = '50%';
+      mini.style.left = '50%';
+      mini.style.transform = 'translate(-50%, -50%)';
+      prev.appendChild(mini);
+      
+      const label = document.createElement('div');
+      label.className = 'unlock-title';
+      label.textContent = type;
+
+      card.appendChild(prev);
+      card.appendChild(label);
+      container.appendChild(card);
+    });
+
+    modal.classList.add('visible');
+    modal.setAttribute('aria-hidden', 'false');
+  }
+
+  handleUnlockSelection(type) {
+    this.currentPool.push(type);
+    this.runUnlocks.push(type);
+    this.updatePoolDisplay();
+    this.closeUnlockModal();
+
+    this.state = "playing";
+    this.isPaused = false;
+    this.lastTime = performance.now();
+    requestAnimationFrame(this.loop);
+  }
+
+  handlePermanentSelection(type) {
+    if (!this.permanentPool.includes(type)) {
+      this.permanentPool.push(type);
+      this.savePool();
+    }
+    this.closeUnlockModal();
+    this.showGameOverScreen();
+  }
+
+  showGameOverScreen() {
+    const summary = `Game Over — Score ${this.score} • Lines ${this.lines} • Level ${this.level}`;
+    achievementsEl.textContent = summary;
+    if (summaryScoreEl) summaryScoreEl.textContent = String(this.score);
+    if (summaryLinesEl) summaryLinesEl.textContent = String(this.lines);
+    if (summaryLevelEl) summaryLevelEl.textContent = String(this.level);
+    if (overlayEl) {
+      overlayEl.classList.add("visible");
+      overlayEl.setAttribute("aria-hidden", "false");
+    }
+    this.active = null;
+    if (this.holdReturnTimer) {
+      clearTimeout(this.holdReturnTimer);
+      this.holdReturnTimer = null;
+    }
+    this.holdReturnPending = false;
+    if (pauseBtn) {
+      pauseBtn.setAttribute("aria-pressed", "false");
+      pauseBtn.textContent = "Pause";
+    }
+    this.renderer.drawBoard();
+  }
+
+  closeUnlockModal() {
+    const modal = document.getElementById('unlock-overlay');
+    if (modal) {
+      modal.classList.remove('visible');
+      modal.setAttribute('aria-hidden', 'true');
+    }
+  }
+
   lockPiece() {
     this.board.mergePiece(this.active);
     const cleared = this.board.clearLines();
@@ -692,6 +890,7 @@ class Game {
         achievementsEl.textContent = `Combo x${this.combo}`;
       }
       this.lines += cleared.length;
+      this.linesSinceUnlock += cleared.length;
       const newLevel = 1 + Math.floor(this.lines / 10);
       if (newLevel > this.level) {
         this.level = newLevel;
@@ -702,6 +901,9 @@ class Game {
       tweenNumber(linesEl, this.lines);
       playTone(550, 50, 0.08);
       playTone(660, 50, 0.08);
+      if (this.linesSinceUnlock >= this.unlockThreshold) {
+        this.unlock();
+      }
     } else {
       this.combo = -1;
       achievementsEl.textContent = "";
@@ -709,23 +911,14 @@ class Game {
     if (this.board.grid[0].some(v => v)) {
       this.state = "gameover";
       this.isPaused = true;
-      const summary = `Game Over — Score ${this.score} • Lines ${this.lines} • Level ${this.level}`;
-      achievementsEl.textContent = summary;
-      if (summaryScoreEl) summaryScoreEl.textContent = String(this.score);
-      if (summaryLinesEl) summaryLinesEl.textContent = String(this.lines);
-      if (summaryLevelEl) summaryLevelEl.textContent = String(this.level);
-      if (overlayEl) {
-        overlayEl.classList.add("visible");
-        overlayEl.setAttribute("aria-hidden","false");
+
+      const potential = this.runUnlocks.filter(u => !this.permanentPool.includes(u));
+      if (potential.length > 0) {
+        this.showUnlockModal(potential, true);
+        return;
       }
-      this.active = null;
-      if (this.holdReturnTimer) {
-        clearTimeout(this.holdReturnTimer);
-        this.holdReturnTimer = null;
-      }
-      this.holdReturnPending = false;
-      if (pauseBtn) { pauseBtn.setAttribute("aria-pressed","false"); pauseBtn.textContent = "Pause"; }
-      this.renderer.drawBoard();
+
+      this.showGameOverScreen();
       return;
     }
     this.active = null;

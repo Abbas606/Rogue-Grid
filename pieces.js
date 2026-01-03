@@ -107,14 +107,6 @@ const PIECES = {
     ],
     center: [1.5, 0.5]
   },
-  'N': {
-    color: '#008000', // Dark Green
-    shape: [
-      [0, 1, 1, 0],
-      [1, 1, 0, 0]
-    ],
-    center: [1.5, 0.5]
-  },
   'P': {
     color: '#800080', // Purple
     shape: [

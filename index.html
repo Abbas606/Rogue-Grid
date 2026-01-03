@@ -47,6 +47,10 @@
               </select>
             </div>
           </div>
+          <div class="controls-card">
+            <div class="controls-title">Piece Pool</div>
+            <div id="pool-display" class="pool-grid"></div>
+          </div>
         </aside>
         <div id="board-wrap">
           <div id="board" role="grid" aria-label="Tetris board" aria-rowcount="20" aria-colcount="10"></div>
@@ -107,6 +111,17 @@
             </div>
           </div>
           <button id="restart-btn" type="button" class="control-btn overlay-restart">Restart</button>
+          <div id="gameover-unlocks" class="unlock-section" style="display:none;">
+             <div class="unlock-title">Choose one to keep permanently:</div>
+             <div id="gameover-unlock-options" class="unlock-options"></div>
+          </div>
+        </div>
+      </div>
+      <div id="unlock-overlay" aria-hidden="true" class="overlay-base">
+        <div class="overlay-inner">
+          <div class="overlay-title">Unlock New Piece</div>
+          <div class="unlock-subtitle">Choose one to add to your current run:</div>
+          <div id="unlock-options" class="unlock-options"></div>
         </div>
       </div>
     </div>
