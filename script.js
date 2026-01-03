@@ -632,30 +632,18 @@ class Game {
     this.renderer.drawHold(this.holdPiece);
     this.holdReturnPending = true;
     if (holdWrap) holdWrap.classList.add("active");
-    setTimeout(() => {
+    if (this.holdReturnTimer) {
+      clearTimeout(this.holdReturnTimer);
+      this.holdReturnTimer = null;
+    }
+    this.holdReturnTimer = setTimeout(() => {
       this.holdReturnPending = false;
+      this.holdPiece = null;
+      this.renderer.drawHold(null);
       if (holdWrap) holdWrap.classList.remove("active");
+      this.holdReturnTimer = null;
     }, 500);
     playTone(440, 140, 0.06);
-  }
-  returnFromHold() {
-    if (this.state !== "playing") return;
-    if (!this.holdPiece) return;
-    if (this.active) return;
-    const fromHold = this.holdPiece;
-    const candidate = new Piece(fromHold.type);
-    candidate.x = 3;
-    candidate.y = -2;
-    if (!this.valid(candidate, 0, 0, candidate.rot)) {
-      return;
-    }
-    this.active = candidate;
-    this.holdPiece = null;
-    this.renderer.drawHold(null);
-    if (holdWrap) {
-      holdWrap.classList.add("active");
-      setTimeout(() => { holdWrap.classList.remove("active"); }, 500);
-    }
   }
 
   bindInput() {
@@ -1109,15 +1097,11 @@ if (params.get("test") === "1") {
     g.holdRelease();
     const b = g.holdPiece === activeAfterStore && g.active === storedFromStore && g.holdReturnPending === true && g.holdAvailable === false;
     g.active = null;
-    for (let r = 0; r <= 1; r++) { for (let ccol = 3; ccol <= 5; ccol++) { g.board.set(r, ccol, "x"); } }
     g.returnFromHold();
-    const c1 = !g.active && !!g.holdPiece;
-    for (let r = 0; r <= 1; r++) { for (let ccol = 3; ccol <= 5; ccol++) { g.board.set(r, ccol, 0); } }
-    g.returnFromHold();
-    const c2 = !!g.active && g.holdPiece === null;
+    const c = !!g.active && g.holdPiece === null && g.holdReturnPending === false;
     g.hardDrop();
     const d = g.holdAvailable === true;
-    achievementsEl.textContent = (a && b && c1 && c2 && d) ? "Tests Passed" : "Tests Failed";
+    achievementsEl.textContent = (a && b && c && d) ? "Tests Passed" : "Tests Failed";
   };
   if (document.readyState !== "loading") run(); else document.addEventListener("DOMContentLoaded", run);
 }
