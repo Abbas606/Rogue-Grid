@@ -4,9 +4,6 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>RogueTris</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
   <link rel="preload" href="styles.css" as="style">
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -130,11 +127,11 @@
       </div>
       <div id="confirm-overlay" aria-hidden="true" class="overlay-base">
         <div class="overlay-inner">
-          <div class="overlay-title">Reset Pool?</div>
-          <div class="unlock-subtitle">This will wipe your progress and revert to the standard 7 pieces. This cannot be undone.</div>
-          <div class="confirm-actions">
-            <button id="confirm-reset-btn" class="control-btn danger">Reset</button>
-            <button id="cancel-reset-btn" class="control-btn ghost">Cancel</button>
+          <div class="overlay-title" style="font-size: 1.5rem; color: #ef4444; background: none; -webkit-text-fill-color: initial;">Reset Pool?</div>
+          <div class="unlock-subtitle" style="margin-bottom: 24px;">This will wipe your progress and revert to the standard 7 pieces. This cannot be undone.</div>
+          <div class="confirm-actions" style="display: flex; gap: 12px; justify-content: center;">
+            <button id="confirm-reset-btn" class="control-btn" style="background: #ef4444; color: white; width: auto; padding: 12px 24px;">Reset</button>
+            <button id="cancel-reset-btn" class="control-btn" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); width: auto; padding: 12px 24px;">Cancel</button>
           </div>
         </div>
       </div>
