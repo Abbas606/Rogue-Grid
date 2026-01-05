@@ -605,13 +605,30 @@ class Game {
     if (this.state !== "playing") return;
     if (!this.active) return;
     if (!this.holdAvailable) return;
+    if (!this.holdPiece) {
+      this.holdPiece = this.active;
+      this.active = new Piece(this.pullNext());
+      this.holdAvailable = false;
+      this.renderer.drawHold(this.holdPiece);
+      this.renderer.drawPreview(this.queue[0] || null);
+      playTone(220, 120, 0.06);
+      if (holdWrap) holdWrap.classList.add("cooldown");
+      return;
+    }
+    const current = this.active;
     const fromHold = this.holdPiece;
-    this.holdPiece = this.active;
-    this.active = fromHold ? new Piece(fromHold.type) : new Piece(this.pullNext());
+    this.active = fromHold;
+    this.active.x = 3;
+    this.active.y = -2;
+    if (!this.valid(this.active, 0, 0, this.active.rot)) {
+      this.active = current;
+      return;
+    }
+    this.holdPiece = current;
     this.holdAvailable = false;
     this.renderer.drawHold(this.holdPiece);
     this.renderer.drawPreview(this.queue[0] || null);
-    playTone(220, 120, 0.06);
+    playTone(440, 140, 0.06);
     if (holdWrap) holdWrap.classList.add("cooldown");
   }
   holdRelease() {
@@ -619,9 +636,10 @@ class Game {
     if (!this.holdPiece) return;
     if (!this.active) return;
     if (this.holdReturnPending) return;
-    const fromHold = this.holdPiece;
+    if (!this.holdAvailable) return;
     const replaced = this.active;
-    this.active = fromHold;
+    const swapIn = this.holdPiece;
+    this.active = swapIn;
     this.active.x = 3;
     this.active.y = -2;
     if (!this.valid(this.active, 0, 0, this.active.rot)) {
@@ -630,6 +648,7 @@ class Game {
     }
     this.holdPiece = replaced;
     this.renderer.drawHold(this.holdPiece);
+    this.holdAvailable = false;
     this.holdReturnPending = true;
     if (holdWrap) holdWrap.classList.add("active");
     if (this.holdReturnTimer) {
@@ -963,9 +982,7 @@ class Game {
       return;
     }
     this.active = null;
-    if (!this.holdReturnPending) {
-      this.spawn();
-    }
+    this.spawn();
     this.holdAvailable = true;
     if (holdWrap) holdWrap.classList.remove("cooldown","active");
     this.renderer.drawBoard();

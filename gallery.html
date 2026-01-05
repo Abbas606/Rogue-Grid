@@ -11,7 +11,7 @@
     }
     h1 {
       text-align: center;
-      color: var(--accent);
+      color: var(--primary);
     }
     #gallery-container {
       display: flex;
@@ -24,12 +24,12 @@
       overflow-y: auto;
     }
     .group-title {
-      color: var(--accent);
+      color: var(--primary);
       margin-bottom: 16px;
     }
     .piece-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
       gap: 24px;
     }
     .piece-card {
@@ -44,7 +44,7 @@
     }
     .piece-name {
       font-weight: 600;
-      color: var(--fg);
+      color: var(--text);
     }
     .piece-preview {
       width: 120px;
@@ -142,7 +142,8 @@
 
     const groupedPieces = groupPolyominoes(PIECES);
 
-    for (const size in groupedPieces) {
+    const sizes = Object.keys(groupedPieces).map(Number).sort((a, b) => a - b);
+    for (const size of sizes) {
       const groupContainer = document.createElement('div');
       groupContainer.className = 'group-container';
 
@@ -154,7 +155,8 @@
       const pieceGrid = document.createElement('div');
       pieceGrid.className = 'piece-grid';
 
-      for (const pieceName in groupedPieces[size]) {
+      const names = Object.keys(groupedPieces[size]).sort((a, b) => a.localeCompare(b));
+      for (const pieceName of names) {
         const pieceCard = createPieceCard(pieceName, groupedPieces[size][pieceName]);
         pieceCard.addEventListener('click', () => {
           const rotation = (parseInt(pieceCard.dataset.rotation) + 1) % 4;

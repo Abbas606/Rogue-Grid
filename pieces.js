@@ -202,13 +202,12 @@ const PIECES = {
   },
   'H13': { color: '#CD5C5C', shape: [[1,1,1,1],[1,0,1,0]], center: [2, 1] },
   'H14': {
-    color: '#FFD700', // Gold
+    color: '#FFD700',
     shape: [
-      [0, 1, 0],
-      [1, 1, 1],
-      [0, 1, 0]
+      [1, 1, 1, 0],
+      [0, 0, 1, 1]
     ],
-    center: [1, 1]
+    center: [1.5, 0.5]
   },
   'H15': { color: '#F5FFFA', shape: [[1,1,1,1],[0,1,0,1]], center: [2, 1] },
   'H16': {
