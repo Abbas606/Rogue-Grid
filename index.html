@@ -28,24 +28,6 @@
                 <label><input type="radio" name="move-scheme" value="wasd"> WASD</label>
               </div>
             </div>
-            <div class="controls-group">
-              <div class="label">Hold</div>
-              <select id="hold-key">
-                <option value="KeyQ">Q</option>
-                <option value="KeyC">C</option>
-                <option value="KeyZ">Z</option>
-                <option value="KeyX">X</option>
-              </select>
-            </div>
-            <div class="controls-group">
-              <div class="label">Release</div>
-              <select id="release-key">
-                <option value="KeyE">E</option>
-                <option value="KeyV">V</option>
-                <option value="KeyR">R</option>
-                <option value="KeyF">F</option>
-              </select>
-            </div>
           </div>
           <div class="controls-card">
             <div class="controls-title">Piece Pool</div>
@@ -62,10 +44,6 @@
           <div id="preview-wrap" aria-label="Next piece preview">
             <div id="preview-title">Next</div>
             <div id="preview" role="img" aria-label="Next tetromino"></div>
-          </div>
-          <div id="hold-wrap" aria-label="Hold piece area">
-            <div id="hold-title">Hold</div>
-            <div id="hold" role="img" aria-label="Held tetromino"></div>
           </div>
           <div id="info">
             <div class="metric">
@@ -89,7 +67,6 @@
         <div class="zone rotate" data-action="rotate"></div>
         <div class="zone right" data-action="right"></div>
         <div class="zone drop" data-action="soft-drop"></div>
-        <div class="zone hold" data-action="hold"></div>
       </section>
       <footer class="bottombar">
         <a href="gallery.html" class="control-btn">Polyomino Gallery</a>

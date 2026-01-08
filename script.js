@@ -9,7 +9,6 @@ const SOFT_DROP_MS = 40;
 const byId = (id) => document.getElementById(id);
 const boardEl = byId("board");
 const previewEl = byId("preview");
-const holdEl = byId("hold");
 const scoreEl = byId("score");
 const linesEl = byId("lines");
 const levelEl = byId("level");
@@ -66,11 +65,9 @@ const makeCells = (container, rows, cols, cls) => {
 
 makeCells(boardEl, H, W, "cell");
 makeCells(previewEl, 6, 6, "preview-cell");
-makeCells(holdEl, 6, 6, "preview-cell");
 particlesCanvas.width = boardEl.clientWidth;
 particlesCanvas.height = boardEl.clientHeight;
 particlesCtx = particlesCanvas.getContext("2d");
-const holdWrap = byId("hold-wrap");
 const previewWrap = byId("preview-wrap");
 let audioCtx = null;
 const playTone = (freq, ms, gain = 0.06) => {
@@ -183,18 +180,54 @@ class Renderer {
     this.board = board;
     this.cells = Array.from(boardEl.children);
     this.prevActiveIdx = [];
+    this.prevGhostIdx = [];
   }
   idx(r, c) { return r * W + c; }
+  validGhost(piece, dx, dy, rot = piece.rot, x = piece.x, y = piece.y) {
+    for (const [bx,by] of piece.blocks(rot, x, y)) {
+      const r = y + by + dy;
+      const c = x + bx + dx;
+      if (c < 0 || c >= W || r >= H) return false;
+      if (r >= 0 && this.board.get(r, c)) return false;
+    }
+    return true;
+  }
   drawBoard() {
     for (let r = 0; r < H; r++) {
       for (let c = 0; c < W; c++) {
         const v = this.board.grid[r][c];
         const el = this.cells[this.idx(r,c)];
         el.className = 'cell';
+        el.style.opacity = '';
         if (v) {
           el.style.backgroundColor = PIECES[v].color;
         } else {
           el.style.backgroundColor = '';
+        }
+      }
+    }
+  }
+  drawGhost(piece) {
+    for (const i of this.prevGhostIdx) {
+      this.cells[i].style.opacity = '';
+      this.cells[i].classList.remove("ghost");
+    }
+    this.prevGhostIdx.length = 0;
+    if (!piece) return;
+    let gy = piece.y;
+    while (this.validGhost(piece, 0, 1, piece.rot, piece.x, gy)) {
+      gy++;
+    }
+    const color = PIECES[piece.type].color;
+    for (const [dx,dy] of piece.blocks(piece.rot, piece.x, gy)) {
+      const r = gy + dy, c = piece.x + dx;
+      if (r >= 0 && r < H && c >= 0 && c < W) {
+        if (!this.board.grid[r][c]) {
+          const i = this.idx(r,c);
+          this.cells[i].style.backgroundColor = color;
+          this.cells[i].style.opacity = '0.28';
+          this.cells[i].classList.add("ghost");
+          this.prevGhostIdx.push(i);
         }
       }
     }
@@ -248,36 +281,6 @@ class Renderer {
     previewEl.style.opacity = "1";
     if (previewWrap) { previewWrap.classList.add("active"); setTimeout(()=>previewWrap.classList.remove("active"), 220); }
   }
-  drawHold(piece) {
-    const cells = Array.from(holdEl.children);
-    for (const c of cells) { c.style.backgroundColor = ''; }
-    if (!piece) {
-      holdEl.style.opacity = "0";
-      holdEl.getBoundingClientRect();
-      holdEl.style.transition = "opacity 200ms ease";
-      holdEl.style.opacity = "1";
-      return;
-    }
-    const type = piece.type;
-    const shape = PIECES[type].shape;
-    const color = PIECES[type].color;
-    const w = shape[0].length;
-    const h = shape.length;
-    const startX = Math.floor((6 - w) / 2);
-    const startY = Math.floor((6 - h) / 2);
-    for (let r = 0; r < h; r++) {
-      for (let c = 0; c < w; c++) {
-        if (shape[r][c]) {
-          const idx = (startY + r) * 6 + (startX + c);
-          cells[idx].style.backgroundColor = color;
-        }
-      }
-    }
-    holdEl.style.opacity = "0";
-    holdEl.getBoundingClientRect();
-    holdEl.style.transition = "opacity 200ms ease";
-    holdEl.style.opacity = "1";
-  }
 }
 
 const tweenNumber = (el, to, dur = 400) => {
@@ -298,10 +301,6 @@ class Game {
     this.renderer = new Renderer(this.board);
     this.queue = [];
     this.active = null;
-    this.holdPiece = null;
-    this.holdAvailable = true;
-    this.holdReturnPending = false;
-    this.holdReturnTimer = null;
     this.keyBindings = {
       moveLeft: ["ArrowLeft"],
       moveRight: ["ArrowRight"],
@@ -309,8 +308,6 @@ class Game {
       rotateCCW: ["ShiftLeft","ShiftRight"],
       softDrop: ["ArrowDown"],
       hardDrop: ["Space"],
-      holdStore: [holdKeySelect ? holdKeySelect.value : "KeyQ"],
-      holdRelease: [releaseKeySelect ? releaseKeySelect.value : "KeyE"],
     };
     this.score = 0;
     this.lines = 0;
@@ -402,7 +399,6 @@ class Game {
   initDisplay() {
     this.renderer.drawBoard();
     this.renderer.drawPreview(null);
-    this.renderer.drawHold(null);
     scoreEl.textContent = "0";
     linesEl.textContent = "0";
     levelEl.textContent = "1";
@@ -423,7 +419,10 @@ class Game {
     this.lastTime = time;
     this.update(dt);
     this.renderer.drawBoard();
-    if (this.active) this.renderer.drawActive(this.active);
+    if (this.active) {
+      this.renderer.drawGhost(this.active);
+      this.renderer.drawActive(this.active);
+    }
     requestAnimationFrame(this.loop);
   }
   update(dt) {
@@ -484,15 +483,6 @@ class Game {
     tweenNumber(linesEl, this.lines);
     tweenNumber(levelEl, this.level);
     achievementsEl.textContent = "";
-    this.holdPiece = null;
-    this.holdAvailable = true;
-    this.holdReturnPending = false;
-    if (this.holdReturnTimer) {
-      clearTimeout(this.holdReturnTimer);
-      this.holdReturnTimer = null;
-    }
-    if (holdWrap) holdWrap.classList.remove("cooldown", "active");
-    this.renderer.drawHold(null);
     if (overlayEl) {
       overlayEl.classList.remove("visible");
       overlayEl.setAttribute("aria-hidden", "true");
@@ -601,69 +591,6 @@ class Game {
       comboVisualEl.classList.remove("visible");
     }, 700);
   }
-  holdStore() {
-    if (this.state !== "playing") return;
-    if (!this.active) return;
-    if (!this.holdAvailable) return;
-    if (!this.holdPiece) {
-      this.holdPiece = this.active;
-      this.active = new Piece(this.pullNext());
-      this.holdAvailable = false;
-      this.renderer.drawHold(this.holdPiece);
-      this.renderer.drawPreview(this.queue[0] || null);
-      playTone(220, 120, 0.06);
-      if (holdWrap) holdWrap.classList.add("cooldown");
-      return;
-    }
-    const current = this.active;
-    const fromHold = this.holdPiece;
-    this.active = fromHold;
-    this.active.x = 3;
-    this.active.y = -2;
-    if (!this.valid(this.active, 0, 0, this.active.rot)) {
-      this.active = current;
-      return;
-    }
-    this.holdPiece = current;
-    this.holdAvailable = false;
-    this.renderer.drawHold(this.holdPiece);
-    this.renderer.drawPreview(this.queue[0] || null);
-    playTone(440, 140, 0.06);
-    if (holdWrap) holdWrap.classList.add("cooldown");
-  }
-  holdRelease() {
-    if (this.state !== "playing") return;
-    if (!this.holdPiece) return;
-    if (!this.active) return;
-    if (this.holdReturnPending) return;
-    if (!this.holdAvailable) return;
-    const replaced = this.active;
-    const swapIn = this.holdPiece;
-    this.active = swapIn;
-    this.active.x = 3;
-    this.active.y = -2;
-    if (!this.valid(this.active, 0, 0, this.active.rot)) {
-      this.active = replaced;
-      return;
-    }
-    this.holdPiece = replaced;
-    this.renderer.drawHold(this.holdPiece);
-    this.holdAvailable = false;
-    this.holdReturnPending = true;
-    if (holdWrap) holdWrap.classList.add("active");
-    if (this.holdReturnTimer) {
-      clearTimeout(this.holdReturnTimer);
-      this.holdReturnTimer = null;
-    }
-    this.holdReturnTimer = setTimeout(() => {
-      this.holdReturnPending = false;
-      this.holdPiece = null;
-      this.renderer.drawHold(null);
-      if (holdWrap) holdWrap.classList.remove("active");
-      this.holdReturnTimer = null;
-    }, 500);
-    playTone(440, 140, 0.06);
-  }
 
   bindInput() {
     window.addEventListener("keydown", (e) => {
@@ -680,8 +607,6 @@ class Game {
       else if (match("rotateCCW")) { e.preventDefault(); this.rotate(-1); }
       else if (match("softDrop")) { e.preventDefault(); this.softDropping = true; }
       else if (match("hardDrop")) { e.preventDefault(); this.hardDrop(); }
-      else if (match("holdStore")) { e.preventDefault(); this.holdStore(); }
-      else if (match("holdRelease")) { e.preventDefault(); this.holdRelease(); }
     });
     window.addEventListener("keyup", (e) => {
       const code = e.code;
@@ -719,16 +644,6 @@ class Game {
         });
       });
     }
-    if (holdKeySelect) {
-      holdKeySelect.addEventListener("change", () => {
-        this.keyBindings.holdStore = [holdKeySelect.value];
-      });
-    }
-    if (releaseKeySelect) {
-      releaseKeySelect.addEventListener("change", () => {
-        this.keyBindings.holdRelease = [releaseKeySelect.value];
-      });
-    }
     const touchpad = byId("touchpad");
     const zoneAction = (el) => el?.dataset?.action;
     let swipeStart = null;
@@ -740,14 +655,6 @@ class Game {
       else if (z === "right") this.move(1,0);
       else if (z === "rotate") this.rotate(1);
       else if (z === "soft-drop") this.softDropping = true;
-      else if (z === "hold") {
-        const now = performance.now();
-        const holdChecker = () => {
-          if (!swipeStart) return;
-          if (performance.now() - swipeStart.t >= 400) { this.hold(); swipeStart = null; }
-        };
-        setTimeout(holdChecker, 420);
-      }
     };
     const onPointerUp = (e) => {
       if (!swipeStart) return;
@@ -914,11 +821,6 @@ class Game {
       overlayEl.setAttribute("aria-hidden", "false");
     }
     this.active = null;
-    if (this.holdReturnTimer) {
-      clearTimeout(this.holdReturnTimer);
-      this.holdReturnTimer = null;
-    }
-    this.holdReturnPending = false;
     if (pauseBtn) {
       pauseBtn.setAttribute("aria-pressed", "false");
       pauseBtn.textContent = "Pause";
@@ -936,11 +838,31 @@ class Game {
 
   lockPiece() {
     this.board.mergePiece(this.active);
-    const cleared = this.board.clearLines();
-    if (cleared.length) {
+    const scores = {1:100,2:300,3:500,4:800};
+    let cleared = this.board.clearLines();
+    if (cleared.length === 0) {
+      this.combo = -1;
+      achievementsEl.textContent = "";
+    }
+    while (cleared.length) {
+      for (let c = 0; c < this.board.w; c++) {
+        const stack = [];
+        for (let r = 0; r < this.board.h; r++) {
+          const v = this.board.grid[r][c];
+          if (v) stack.push(v);
+        }
+        let r = this.board.h - 1;
+        while (stack.length) {
+          this.board.grid[r][c] = stack.pop();
+          r--;
+        }
+        while (r >= 0) {
+          this.board.grid[r][c] = 0;
+          r--;
+        }
+      }
       this.spawnParticles(cleared);
       if (cleared.length > 1) this.showCombo(cleared.length);
-      const scores = {1:100,2:300,3:500,4:800};
       const add = (scores[cleared.length] || 0) * this.level;
       this.score += add;
       this.combo++;
@@ -963,10 +885,9 @@ class Game {
       playTone(660, 50, 0.08);
       if (this.linesSinceUnlock >= this.unlockThreshold) {
         this.unlock();
+        break;
       }
-    } else {
-      this.combo = -1;
-      achievementsEl.textContent = "";
+      cleared = this.board.clearLines();
     }
     if (this.board.grid[0].some(v => v)) {
       this.state = "gameover";
@@ -983,8 +904,6 @@ class Game {
     }
     this.active = null;
     this.spawn();
-    this.holdAvailable = true;
-    if (holdWrap) holdWrap.classList.remove("cooldown","active");
     this.renderer.drawBoard();
   }
   update(dt) {
@@ -1012,7 +931,10 @@ class Game {
       }
     }
     this.renderer.drawBoard();
-    this.renderer.drawActive(this.active);
+    if (this.active) {
+      this.renderer.drawGhost(this.active);
+      this.renderer.drawActive(this.active);
+    }
   }
   loop(t) {
     if (this.state !== "playing") return;
@@ -1101,24 +1023,4 @@ if (document.readyState !== "loading") {
   if (pauseBtn) pauseBtn.disabled = true;
 } else {
   document.addEventListener("DOMContentLoaded", () => { if (pauseBtn) pauseBtn.disabled = true; });
-}
-const params = new URLSearchParams(location.search);
-if (params.get("test") === "1") {
-  const run = () => {
-    const g = new Game();
-    g.start();
-    g.holdStore();
-    const a = !!g.holdPiece && g.holdAvailable === false;
-    const storedFromStore = g.holdPiece;
-    const activeAfterStore = g.active;
-    g.holdRelease();
-    const b = g.holdPiece === activeAfterStore && g.active === storedFromStore && g.holdReturnPending === true && g.holdAvailable === false;
-    g.active = null;
-    g.returnFromHold();
-    const c = !!g.active && g.holdPiece === null && g.holdReturnPending === false;
-    g.hardDrop();
-    const d = g.holdAvailable === true;
-    achievementsEl.textContent = (a && b && c && d) ? "Tests Passed" : "Tests Failed";
-  };
-  if (document.readyState !== "loading") run(); else document.addEventListener("DOMContentLoaded", run);
 }
