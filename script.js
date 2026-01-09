@@ -248,6 +248,31 @@ class Renderer {
       }
     }
   }
+  clearAllTemporaryElements() {
+    // Clear all temporary visual elements including ghost pieces
+    for (const i of this.prevGhostIdx) {
+      this.cells[i].style.opacity = '';
+      this.cells[i].classList.remove("ghost");
+    }
+    this.prevGhostIdx.length = 0;
+    
+    for (const i of this.prevActiveIdx) {
+      this.cells[i].classList.remove("active");
+    }
+    this.prevActiveIdx.length = 0;
+    
+    // Clear any other temporary styling
+    for (let r = 0; r < H; r++) {
+      for (let c = 0; c < W; c++) {
+        const i = this.idx(r, c);
+        const el = this.cells[i];
+        if (!el.classList.contains('cell')) {
+          el.className = 'cell';
+        }
+      }
+    }
+  }
+
   drawPreview(type) {
     const cells = Array.from(previewEl.children);
     for (const c of cells) {
@@ -308,6 +333,8 @@ class Game {
       rotateCCW: ["ShiftLeft","ShiftRight"],
       softDrop: ["ArrowDown"],
       hardDrop: ["Space"],
+      hold: ["KeyQ"],
+      release: ["KeyE"],
     };
     this.score = 0;
     this.lines = 0;
@@ -327,10 +354,29 @@ class Game {
     this.linesSinceUnlock = 0;
     this.unlockThreshold = 10;
 
+    // Hold/Release System
+    this.heldPiece = null;
+    this.holdCooldown = 0;
+    this.holdCooldownTime = 500; // 500ms cooldown
+    this.lastHoldTime = 0;
+    this.holdStorageKey = 'rogueTris_heldPiece';
+    this.holdExpirationTime = 5 * 60 * 1000; // 5 minutes in milliseconds
+
     this.loop = this.loop.bind(this);
     this.bindInput();
     this.initDisplay();
     this.updatePoolDisplay();
+    
+    // Add event listener for unlock modal closure
+    window.addEventListener('unlockModalClosed', () => {
+      this.clearVisualGuides();
+      this.renderer.clearAllTemporaryElements();
+      this.renderer.drawBoard();
+      if (this.active) {
+        this.renderer.drawGhost(this.active);
+        this.renderer.drawActive(this.active);
+      }
+    });
   }
 
   loadPool() {
@@ -418,12 +464,27 @@ class Game {
     const dt = time - this.lastTime;
     this.lastTime = time;
     this.update(dt);
+    
+    // Validation check: ensure no temporary visual artifacts remain
+    this.validateAndClearTemporaryElements();
+    
     this.renderer.drawBoard();
     if (this.active) {
       this.renderer.drawGhost(this.active);
       this.renderer.drawActive(this.active);
     }
     requestAnimationFrame(this.loop);
+  }
+
+  validateAndClearTemporaryElements() {
+    // Check if unlock modal is visible
+    const modal = document.getElementById('unlock-overlay');
+    const isModalVisible = modal && modal.classList.contains('visible');
+    
+    // If modal is not visible but we have visual guides, clear them
+    if (!isModalVisible) {
+      this.clearVisualGuides();
+    }
   }
   update(dt) {
     if (this.state !== "playing") return;
@@ -607,6 +668,8 @@ class Game {
       else if (match("rotateCCW")) { e.preventDefault(); this.rotate(-1); }
       else if (match("softDrop")) { e.preventDefault(); this.softDropping = true; }
       else if (match("hardDrop")) { e.preventDefault(); this.hardDrop(); }
+      else if (match("hold")) { e.preventDefault(); this.hold(); }
+      else if (match("release")) { e.preventDefault(); this.release(); }
     });
     window.addEventListener("keyup", (e) => {
       const code = e.code;
@@ -834,6 +897,24 @@ class Game {
       modal.classList.remove('visible');
       modal.setAttribute('aria-hidden', 'true');
     }
+    // Clear any visual guides and temporary elements
+    this.clearVisualGuides();
+    // Force complete board redraw to ensure no artifacts remain
+    this.renderer.clearAllTemporaryElements();
+    this.renderer.drawBoard();
+    if (this.active) {
+      this.renderer.drawGhost(this.active);
+      this.renderer.drawActive(this.active);
+    }
+    
+    // Dispatch custom event for popup closure
+    window.dispatchEvent(new CustomEvent('unlockModalClosed'));
+  }
+
+  clearVisualGuides() {
+    // Clear any temporary visual guide lines or elements
+    const guideElements = document.querySelectorAll('.visual-guide, .temp-line, .guide-line');
+    guideElements.forEach(el => el.remove());
   }
 
   lockPiece() {
@@ -943,6 +1024,130 @@ class Game {
     this.lastTime = t;
     this.update(dt);
     requestAnimationFrame(this.loop);
+  }
+
+  hold() {
+    if (!this.active || this.state !== "playing") return;
+    
+    const now = Date.now();
+    if (now - this.lastHoldTime < this.holdCooldownTime) return;
+    
+    // Store current piece in hold
+    const pieceData = {
+      type: this.active.type,
+      rot: this.active.rot,
+      x: this.active.x,
+      y: this.active.y,
+      timestamp: now
+    };
+    
+    try {
+      localStorage.setItem(this.holdStorageKey, JSON.stringify(pieceData));
+      this.heldPiece = pieceData;
+      this.lastHoldTime = now;
+      
+      // Clear current active piece
+      this.active = null;
+      this.renderer.drawBoard();
+      
+      // Update hold display
+      this.updateHoldDisplay();
+      
+    } catch (e) {
+      console.warn('Failed to store piece in hold:', e);
+    }
+  }
+
+  release() {
+    if (this.state !== "playing") return;
+    
+    const now = Date.now();
+    if (now - this.lastHoldTime < this.holdCooldownTime) return;
+    
+    if (!this.heldPiece) {
+      // Try to load from localStorage
+      try {
+        const stored = localStorage.getItem(this.holdStorageKey);
+        if (stored) {
+          const pieceData = JSON.parse(stored);
+          const age = now - pieceData.timestamp;
+          if (age < this.holdExpirationTime) {
+            this.heldPiece = pieceData;
+          } else {
+            localStorage.removeItem(this.holdStorageKey);
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to load piece from hold:', e);
+      }
+    }
+    
+    if (!this.heldPiece) return;
+    
+    // Check if piece is expired
+    const age = now - this.heldPiece.timestamp;
+    if (age >= this.holdExpirationTime) {
+      this.heldPiece = null;
+      localStorage.removeItem(this.holdStorageKey);
+      this.updateHoldDisplay();
+      return;
+    }
+    
+    // Create new piece from held data
+    const newPiece = new Piece(this.heldPiece.type);
+    newPiece.rot = this.heldPiece.rot;
+    newPiece.x = this.heldPiece.x;
+    newPiece.y = this.heldPiece.y;
+    
+    // Validate position
+    if (!this.valid(newPiece, 0, 0)) {
+      // Try to adjust position
+      newPiece.x = Math.floor(W / 2);
+      newPiece.y = -2;
+      if (!this.valid(newPiece, 0, 0)) {
+        return; // Can't place piece
+      }
+    }
+    
+    this.active = newPiece;
+    this.lastHoldTime = now;
+    
+    // Clear hold storage
+    this.heldPiece = null;
+    try {
+      localStorage.removeItem(this.holdStorageKey);
+    } catch (e) {
+      console.warn('Failed to clear hold storage:', e);
+    }
+    
+    this.updateHoldDisplay();
+    this.renderer.drawBoard();
+    this.renderer.drawGhost(this.active);
+    this.renderer.drawActive(this.active);
+  }
+
+  updateHoldDisplay() {
+    // Update visual feedback for hold cell
+    const holdCell = document.getElementById('hold-cell');
+    if (holdCell) {
+      if (this.heldPiece) {
+        holdCell.classList.add('occupied');
+        holdCell.classList.remove('empty');
+        
+        // Show piece preview in hold cell
+        const shape = PIECES[this.heldPiece.type].shape;
+        const color = PIECES[this.heldPiece.type].color;
+        holdCell.style.backgroundColor = color;
+        
+        // Add animation class
+        holdCell.classList.add('hold-transition');
+        setTimeout(() => holdCell.classList.remove('hold-transition'), 300);
+      } else {
+        holdCell.classList.add('empty');
+        holdCell.classList.remove('occupied');
+        holdCell.style.backgroundColor = '';
+      }
+    }
   }
   spawnParticles(rows) {
     const width = particlesCanvas.width;
