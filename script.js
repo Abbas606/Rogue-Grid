@@ -9,6 +9,7 @@ const SOFT_DROP_MS = 40;
 const byId = (id) => document.getElementById(id);
 const boardEl = byId("board");
 const previewEl = byId("preview");
+const holdEl = byId("hold");
 const scoreEl = byId("score");
 const linesEl = byId("lines");
 const levelEl = byId("level");
@@ -306,6 +307,39 @@ class Renderer {
     previewEl.style.opacity = "1";
     if (previewWrap) { previewWrap.classList.add("active"); setTimeout(()=>previewWrap.classList.remove("active"), 220); }
   }
+
+  drawHold(heldPiece) {
+    const cells = Array.from(holdEl.children);
+    for (const c of cells) {
+      c.style.backgroundColor = '';
+    }
+    if (!heldPiece) {
+      holdEl.style.opacity = "0";
+      holdEl.getBoundingClientRect();
+      holdEl.style.transition = "opacity 200ms ease";
+      holdEl.style.opacity = "1";
+      return;
+    }
+    const piece = new Piece(heldPiece.type);
+    const shape = piece.shape();
+    const color = PIECES[heldPiece.type].color;
+    const w = shape[0].length;
+    const h = shape.length;
+    const startX = Math.floor((6 - w) / 2);
+    const startY = Math.floor((6 - h) / 2);
+    for (let r = 0; r < h; r++) {
+      for (let c = 0; c < w; c++) {
+        if (shape[r][c]) {
+          const idx = (startY + r) * 6 + (startX + c);
+          cells[idx].style.backgroundColor = color;
+        }
+      }
+    }
+    holdEl.style.opacity = "0";
+    holdEl.getBoundingClientRect();
+    holdEl.style.transition = "opacity 200ms ease";
+    holdEl.style.opacity = "1";
+  }
 }
 
 const tweenNumber = (el, to, dur = 400) => {
@@ -366,6 +400,33 @@ class Game {
     this.bindInput();
     this.initDisplay();
     this.updatePoolDisplay();
+
+    const availableKeys = ["KeyQ", "KeyW", "KeyE", "KeyA", "KeyS", "KeyD", "KeyZ", "KeyX", "KeyC"];
+    const holdKeySelect = byId("hold-key");
+    const releaseKeySelect = byId("release-key");
+
+    availableKeys.forEach(key => {
+      const option1 = document.createElement("option");
+      option1.value = key;
+      option1.textContent = key.replace("Key", "");
+      holdKeySelect.appendChild(option1);
+
+      const option2 = document.createElement("option");
+      option2.value = key;
+      option2.textContent = key.replace("Key", "");
+      releaseKeySelect.appendChild(option2);
+    });
+
+    holdKeySelect.value = this.keyBindings.hold[0];
+    releaseKeySelect.value = this.keyBindings.release[0];
+
+    holdKeySelect.addEventListener("change", (e) => {
+      this.keyBindings.hold[0] = e.target.value;
+    });
+
+    releaseKeySelect.addEventListener("change", (e) => {
+      this.keyBindings.release[0] = e.target.value;
+    });
     
     // Add event listener for unlock modal closure
     window.addEventListener('unlockModalClosed', () => {
@@ -1054,18 +1115,23 @@ class Game {
       this.updateHoldDisplay();
       
     } catch (e) {
-      console.warn('Failed to store piece in hold:', e);
+      if (e.name === 'QuotaExceededError') {
+        console.warn('LocalStorage quota exceeded. Could not hold piece.');
+        // Optionally, provide feedback to the user
+        this.showTemporaryMessage('Storage full, cannot hold piece.');
+      } else {
+        console.warn('Failed to store piece in hold:', e);
+      }
     }
   }
 
   release() {
     if (this.state !== "playing") return;
-    
+
     const now = Date.now();
     if (now - this.lastHoldTime < this.holdCooldownTime) return;
-    
+
     if (!this.heldPiece) {
-      // Try to load from localStorage
       try {
         const stored = localStorage.getItem(this.holdStorageKey);
         if (stored) {
@@ -1081,10 +1147,9 @@ class Game {
         console.warn('Failed to load piece from hold:', e);
       }
     }
-    
+
     if (!this.heldPiece) return;
-    
-    // Check if piece is expired
+
     const age = now - this.heldPiece.timestamp;
     if (age >= this.holdExpirationTime) {
       this.heldPiece = null;
@@ -1092,34 +1157,45 @@ class Game {
       this.updateHoldDisplay();
       return;
     }
-    
-    // Create new piece from held data
+
     const newPiece = new Piece(this.heldPiece.type);
     newPiece.rot = this.heldPiece.rot;
     newPiece.x = this.heldPiece.x;
     newPiece.y = this.heldPiece.y;
-    
-    // Validate position
+
     if (!this.valid(newPiece, 0, 0)) {
-      // Try to adjust position
       newPiece.x = Math.floor(W / 2);
       newPiece.y = -2;
       if (!this.valid(newPiece, 0, 0)) {
-        return; // Can't place piece
+        return;
       }
     }
-    
+
+    if (this.active) {
+      this.heldPiece = {
+        type: this.active.type,
+        rot: this.active.rot,
+        x: this.active.x,
+        y: this.active.y,
+        timestamp: now
+      };
+      try {
+        localStorage.setItem(this.holdStorageKey, JSON.stringify(this.heldPiece));
+      } catch (e) {
+        console.warn('Failed to store piece in hold:', e);
+      }
+    } else {
+      this.heldPiece = null;
+      try {
+        localStorage.removeItem(this.holdStorageKey);
+      } catch (e) {
+        console.warn('Failed to clear hold storage:', e);
+      }
+    }
+
     this.active = newPiece;
     this.lastHoldTime = now;
-    
-    // Clear hold storage
-    this.heldPiece = null;
-    try {
-      localStorage.removeItem(this.holdStorageKey);
-    } catch (e) {
-      console.warn('Failed to clear hold storage:', e);
-    }
-    
+
     this.updateHoldDisplay();
     this.renderer.drawBoard();
     this.renderer.drawGhost(this.active);
@@ -1127,27 +1203,18 @@ class Game {
   }
 
   updateHoldDisplay() {
-    // Update visual feedback for hold cell
-    const holdCell = document.getElementById('hold-cell');
-    if (holdCell) {
-      if (this.heldPiece) {
-        holdCell.classList.add('occupied');
-        holdCell.classList.remove('empty');
-        
-        // Show piece preview in hold cell
-        const shape = PIECES[this.heldPiece.type].shape;
-        const color = PIECES[this.heldPiece.type].color;
-        holdCell.style.backgroundColor = color;
-        
-        // Add animation class
-        holdCell.classList.add('hold-transition');
-        setTimeout(() => holdCell.classList.remove('hold-transition'), 300);
-      } else {
-        holdCell.classList.add('empty');
-        holdCell.classList.remove('occupied');
-        holdCell.style.backgroundColor = '';
-      }
-    }
+    this.renderer.drawHold(this.heldPiece);
+  }
+
+  showTemporaryMessage(message, duration = 2000) {
+    const messageEl = document.createElement('div');
+    messageEl.textContent = message;
+    messageEl.className = 'temporary-message';
+    document.body.appendChild(messageEl);
+    
+    setTimeout(() => {
+      messageEl.remove();
+    }, duration);
   }
   spawnParticles(rows) {
     const width = particlesCanvas.width;
