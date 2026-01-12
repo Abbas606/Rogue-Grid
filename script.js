@@ -1093,36 +1093,48 @@ class Game {
     const now = Date.now();
     if (now - this.lastHoldTime < this.holdCooldownTime) return;
     
-    // Store current piece in hold
-    const pieceData = {
-      type: this.active.type,
-      rot: this.active.rot,
-      x: this.active.x,
-      y: this.active.y,
-      timestamp: now
-    };
-    
-    try {
-      localStorage.setItem(this.holdStorageKey, JSON.stringify(pieceData));
+    // If no piece is currently held: move active to hold and spawn next
+    if (!this.heldPiece) {
+      const pieceData = { type: this.active.type, timestamp: now };
+      try {
+        localStorage.setItem(this.holdStorageKey, JSON.stringify(pieceData));
+      } catch (e) {
+        console.warn('Failed to persist held piece:', e);
+      }
       this.heldPiece = pieceData;
       this.lastHoldTime = now;
-      
-      // Clear current active piece
-      this.active = null;
-      this.renderer.drawBoard();
-      
-      // Update hold display
       this.updateHoldDisplay();
-      
-    } catch (e) {
-      if (e.name === 'QuotaExceededError') {
-        console.warn('LocalStorage quota exceeded. Could not hold piece.');
-        // Optionally, provide feedback to the user
-        this.showTemporaryMessage('Storage full, cannot hold piece.');
-      } else {
-        console.warn('Failed to store piece in hold:', e);
+      this.active = null;
+      this.spawn();
+      this.renderer.drawBoard();
+      return;
+    }
+
+    // If a piece is held: swap active with held and continue dropping
+    const oldActiveType = this.active.type;
+    const newPiece = new Piece(this.heldPiece.type);
+    // Validate default spawn; if invalid, try centered top fallback
+    if (!this.valid(newPiece, 0, 0, newPiece.rot)) {
+      newPiece.x = Math.floor(W / 2);
+      newPiece.y = -2;
+      newPiece.rot = 0;
+      if (!this.valid(newPiece, 0, 0, newPiece.rot)) {
+        return;
       }
     }
+    this.active = newPiece;
+    const pieceData = { type: oldActiveType, timestamp: now };
+    try {
+      localStorage.setItem(this.holdStorageKey, JSON.stringify(pieceData));
+    } catch (e) {
+      console.warn('Failed to persist held piece:', e);
+    }
+    this.heldPiece = pieceData;
+    this.lastHoldTime = now;
+    this.updateHoldDisplay();
+    this.renderer.drawBoard();
+    this.renderer.drawGhost(this.active);
+    this.renderer.drawActive(this.active);
   }
 
   release() {
@@ -1158,15 +1170,13 @@ class Game {
       return;
     }
 
+    // Spawn held piece at default spawn position (not previous board coords)
     const newPiece = new Piece(this.heldPiece.type);
-    newPiece.rot = this.heldPiece.rot;
-    newPiece.x = this.heldPiece.x;
-    newPiece.y = this.heldPiece.y;
-
-    if (!this.valid(newPiece, 0, 0)) {
+    if (!this.valid(newPiece, 0, 0, newPiece.rot)) {
       newPiece.x = Math.floor(W / 2);
       newPiece.y = -2;
-      if (!this.valid(newPiece, 0, 0)) {
+      newPiece.rot = 0;
+      if (!this.valid(newPiece, 0, 0, newPiece.rot)) {
         return;
       }
     }
@@ -1174,9 +1184,6 @@ class Game {
     if (this.active) {
       this.heldPiece = {
         type: this.active.type,
-        rot: this.active.rot,
-        x: this.active.x,
-        y: this.active.y,
         timestamp: now
       };
       try {
