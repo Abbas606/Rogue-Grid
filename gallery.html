@@ -8,6 +8,11 @@
   <style>
     body {
       background: #0a0f1d;
+      margin: 0;
+      padding: 24px;
+      display: block;
+      height: auto;
+      overflow: auto;
     }
     h1 {
       text-align: center;
@@ -16,12 +21,12 @@
     #gallery-container {
       display: flex;
       flex-direction: column;
-      gap: 24px;
-      padding: 24px;
+      gap: var(--layout-gap, 24px);
+      padding: 0;
       max-width: 1200px;
       margin: 0 auto;
-      max-height: 80vh;
-      overflow-y: auto;
+      max-height: none;
+      overflow: visible;
     }
     .group-title {
       color: var(--primary);
@@ -30,7 +35,7 @@
     .piece-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-      gap: 24px;
+      gap: var(--layout-gap, 24px);
     }
     .piece-card {
       border: var(--border);

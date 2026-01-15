@@ -6,10 +6,21 @@ const LOCK_DELAY_MS = 500;
 const BASE_GRAVITY_MS = 1000;
 const SOFT_DROP_MS = 40;
 
+const computeGravity = (level, speedUpLevels) => {
+  const base = BASE_GRAVITY_MS;
+  const lv = Math.max(1, level | 0);
+  const su = Math.max(0, speedUpLevels | 0);
+  const levelFactor = Math.pow(0.9, lv - 1);
+  const upgradeFactor = Math.pow(0.85, su);
+  const ms = base * levelFactor * upgradeFactor;
+  return Math.max(200, Math.floor(ms));
+};
+
 const byId = (id) => document.getElementById(id);
 const boardEl = byId("board");
 const previewEl = byId("preview");
 const holdEl = byId("hold");
+const warningBannerEl = byId("warning-banner");
 const scoreEl = byId("score");
 const linesEl = byId("lines");
 const levelEl = byId("level");
@@ -28,6 +39,7 @@ const comboVisualEl = byId("combo-visual");
 const controlsMovementRadios = document.querySelectorAll('input[name="move-scheme"]');
 const holdKeySelect = byId("hold-key");
 const releaseKeySelect = byId("release-key");
+const warningSoundToggle = byId("warning-sound-toggle");
 let autoScale = 1;
 const computeAutoScale = () => {
   if (!scaleRoot) return 1;
@@ -66,6 +78,10 @@ const makeCells = (container, rows, cols, cls) => {
 
 makeCells(boardEl, H, W, "cell");
 makeCells(previewEl, 6, 6, "preview-cell");
+const previewEl2 = byId("preview2");
+if (previewEl2) makeCells(previewEl2, 6, 6, "preview-cell");
+const holdEl2 = byId("hold2");
+if (holdEl2) makeCells(holdEl2, 6, 6, "preview-cell");
 particlesCanvas.width = boardEl.clientWidth;
 particlesCanvas.height = boardEl.clientHeight;
 particlesCtx = particlesCanvas.getContext("2d");
@@ -84,6 +100,38 @@ const playTone = (freq, ms, gain = 0.06) => {
     osc.start();
     setTimeout(() => { try { osc.stop(); } catch (e) {} }, ms);
   } catch (e) {}
+};
+const runGravitySelfTest = () => {
+  try {
+    const a = computeGravity(1, 0);
+    const b = computeGravity(2, 0);
+    const c = computeGravity(5, 0);
+    const d = computeGravity(5, 2);
+    const e = computeGravity(20, 0);
+    if (!(a >= b && b >= c)) {
+      console.error("Gravity test failed: level ordering", { a, b, c });
+    }
+    if (!(d < c)) {
+      console.error("Gravity test failed: speedUpLevels effect", { c, d });
+    }
+    if (!(e >= 200 && e <= a)) {
+      console.error("Gravity test failed: clamp or range", { e, a });
+    }
+  } catch (err) {
+    console.error("Gravity test error", err);
+  }
+};
+
+const showWarningBanner = (msg) => {
+  if (!warningBannerEl) return;
+  warningBannerEl.textContent = msg;
+  warningBannerEl.classList.add('warning-banner-visible');
+};
+
+const clearWarningBanner = () => {
+  if (!warningBannerEl) return;
+  warningBannerEl.textContent = "";
+  warningBannerEl.classList.remove('warning-banner-visible');
 };
 
 
@@ -114,6 +162,30 @@ const SRS_I_LEFT = {
 
 const STANDARD_PIECES = ['I', 'O', 'T', 'L', 'J', 'S', 'Z'];
 
+const UPGRADE_DEFS = [
+  { id: 'speed_up', name: 'Speed Up', type: 'temp', weight: 3, icon: '⚡', desc: 'Stacking speed boost for a few levels' },
+  { id: 'extra_reroll', name: 'Extra Re-roll', type: 'temp', weight: 2, icon: '🎲', desc: '+1 reroll next choice' },
+  { id: 'second_chance', name: 'Second Chance', type: 'temp', weight: 1, icon: '❤️', desc: 'Survive game over once' },
+  { id: 'invulnerability', name: 'Invulnerability', type: 'temp', weight: 1, icon: '🛡️', desc: 'Ignore game over a few times' },
+  { id: 'score_mult', name: 'Score Multiplier', type: 'temp', weight: 2, icon: '✖', desc: 'Double score for a few clears' },
+  { id: 'board_clear', name: 'Board Blast', type: 'temp', weight: 1, icon: '💥', desc: 'Clear bottom rows instantly' },
+  { id: 'expanded_preview', name: 'Expanded Preview', type: 'perm', weight: 2, icon: '🔭', desc: 'Show +1 next piece' },
+  { id: 'piece_removal', name: 'Remove Piece', type: 'perm', weight: 2, icon: '🗑️', desc: 'Remove a piece type' },
+  { id: 'obstacle_mode', name: 'Obstacle Mode', type: 'perm', weight: 1, icon: '🧱', desc: 'Rising bricks, double points' },
+];
+const pickWeighted = (items, count) => {
+  const pool = [];
+  items.forEach(it => { for (let i = 0; i < it.weight; i++) pool.push(it); });
+  const res = [];
+  const used = new Set();
+  while (res.length < count && pool.length) {
+    const idx = Math.floor(Math.random() * pool.length);
+    const cand = pool[idx];
+    if (!used.has(cand.id)) { res.push(cand); used.add(cand.id); }
+    pool.splice(idx, 1);
+  }
+  return res;
+};
 const bagRandom = (source) => {
   const pool = [...(source || Object.keys(PIECES))];
   for (let i = pool.length - 1; i > 0; i--) {
@@ -128,6 +200,7 @@ class Board {
     this.w = w; this.h = h;
     this.grid = Array.from({ length: h }, () => Array(w).fill(0));
   }
+  isObstacleCell(v) { return v === 'OB2' || v === 'OB1'; }
   get(r, c) {
     if (r < 0 || r >= this.h || c < 0 || c >= this.w) return null;
     return this.grid[r][c];
@@ -144,15 +217,40 @@ class Board {
   }
   clearLines() {
     const cleared = [];
+    const clearedHadObstacles = [];
     for (let r = this.h - 1; r >= 0; r--) {
       if (this.grid[r].every(v => v)) {
-        cleared.push(r);
-        this.grid.splice(r, 1);
-        this.grid.unshift(Array(this.w).fill(0));
-        r++;
+        const hasOb2 = this.grid[r].some(v => this.isObstacleCell(v) && v === 'OB2');
+        if (hasOb2) {
+          for (let c = 0; c < this.w; c++) {
+            const v = this.grid[r][c];
+            this.grid[r][c] = (v === 'OB2') ? 'OB1' : 0;
+          }
+        } else {
+          const hadOb = this.grid[r].some(v => this.isObstacleCell(v));
+          cleared.push(r);
+          clearedHadObstacles.push(hadOb);
+          this.grid.splice(r, 1);
+          this.grid.unshift(Array(this.w).fill(0));
+          r++;
+        }
       }
     }
+    this.lastClearedHadObstacles = clearedHadObstacles;
     return cleared;
+  }
+  addObstacleRow() {
+    const topRow = this.grid[0];
+    const hasBlocksInTop = topRow.some(v => v && !this.isObstacleCell(v));
+    if (hasBlocksInTop) {
+      for (let c = 0; c < this.w; c++) {
+        if (!this.isObstacleCell(topRow[c])) {
+          topRow[c] = topRow[c];
+        }
+      }
+    }
+    this.grid.shift();
+    this.grid.push(Array(this.w).fill('OB2'));
   }
 }
 
@@ -201,7 +299,11 @@ class Renderer {
         el.className = 'cell';
         el.style.opacity = '';
         if (v) {
-          el.style.backgroundColor = PIECES[v].color;
+          if (v === 'OB2' || v === 'OB1') {
+            el.style.backgroundColor = v === 'OB2' ? '#6b7280' : '#9ca3af';
+          } else {
+            el.style.backgroundColor = PIECES[v].color;
+          }
         } else {
           el.style.backgroundColor = '';
         }
@@ -388,6 +490,20 @@ class Game {
     this.linesSinceUnlock = 0;
     this.unlockThreshold = 10;
 
+    // Upgrade state
+    this.tempUpgrades = {
+      speedUpLevels: 0,
+      rerollCharges: 0,
+      shieldCharges: 0,
+      scoreMultiplier: 1,
+      scoreMultiplierLines: 0,
+    };
+    this.secondChanceAvailable = false;
+    this.permUpgrades = { expandedPreview: false, obstacleMode: false };
+    this.removedPieces = [];
+    this.warningAudioEnabled = true;
+    this.pendingObstacleTimeout = null;
+
     // Hold/Release System
     this.heldPiece = null;
     this.holdCooldown = 0;
@@ -400,6 +516,7 @@ class Game {
     this.bindInput();
     this.initDisplay();
     this.updatePoolDisplay();
+    this.updateUpgradeIndicators();
 
     const availableKeys = ["KeyQ", "KeyW", "KeyE", "KeyA", "KeyS", "KeyD", "KeyZ", "KeyX", "KeyC"];
     const holdKeySelect = byId("hold-key");
@@ -427,6 +544,12 @@ class Game {
     releaseKeySelect.addEventListener("change", (e) => {
       this.keyBindings.release[0] = e.target.value;
     });
+    if (warningSoundToggle) {
+      this.warningAudioEnabled = warningSoundToggle.checked;
+      warningSoundToggle.addEventListener("change", () => {
+        this.warningAudioEnabled = warningSoundToggle.checked;
+      });
+    }
     
     // Add event listener for unlock modal closure
     window.addEventListener('unlockModalClosed', () => {
@@ -511,6 +634,8 @@ class Game {
     levelEl.textContent = "1";
     achievementsEl.textContent = "";
     if (pauseBtn) pauseBtn.disabled = true;
+    const ind = byId('upgrade-indicators');
+    if (ind) ind.innerHTML = '';
   }
   start() {
     this.reset();
@@ -585,6 +710,32 @@ class Game {
     }
     if (this.queue.length === 0) this.queue = bagRandom(this.currentPool);
     this.renderer.drawPreview(this.queue[0] || null);
+    const p2 = byId('preview2');
+    if (p2) {
+      p2.style.display = this.permUpgrades.expandedPreview ? 'grid' : 'none';
+      if (this.permUpgrades.expandedPreview) {
+        const cells = Array.from(p2.children);
+        for (const c of cells) c.style.backgroundColor = '';
+        const next2 = this.queue[1] || null;
+        if (next2) {
+          const piece = new Piece(next2);
+          const shape = piece.shape();
+          const color = PIECES[next2].color;
+          const w = shape[0].length;
+          const h = shape.length;
+          const startX = Math.floor((6 - w) / 2);
+          const startY = Math.floor((6 - h) / 2);
+          for (let r = 0; r < h; r++) {
+            for (let c = 0; c < w; c++) {
+              if (shape[r][c]) {
+                const idx = (startY + r) * 6 + (startX + c);
+                cells[idx].style.backgroundColor = color;
+              }
+            }
+          }
+        }
+      }
+    }
   }
   reset() {
     this.board = new Board(W, H);
@@ -598,6 +749,11 @@ class Game {
     this.currentPool = [...this.permanentPool];
     this.runUnlocks = [];
     this.linesSinceUnlock = 0;
+    if (this.pendingObstacleTimeout) {
+      clearTimeout(this.pendingObstacleTimeout);
+      this.pendingObstacleTimeout = null;
+    }
+    clearWarningBanner();
     this.updatePoolDisplay();
 
     this.spawn();
@@ -609,11 +765,11 @@ class Game {
       overlayEl.classList.remove("visible");
       overlayEl.setAttribute("aria-hidden", "true");
     }
+    this.updateUpgradeIndicators();
   }
   ticksForLevel() {
-    const base = BASE_GRAVITY_MS;
-    const accel = Math.max(80, base - (this.level - 1) * 60);
-    return accel;
+    const su = this.tempUpgrades ? this.tempUpgrades.speedUpLevels : 0;
+    return computeGravity(this.level, su);
   }
   valid(piece, dx, dy, rot = piece.rot) {
     for (const [bx,by] of piece.blocks(rot)) {
@@ -835,15 +991,30 @@ class Game {
       this.rerollUsed = false;
     }
 
-    const options = this.generateUnlockOptions(3);
-    if (options.length === 0) return;
+    const pieceOptions = this.generateUnlockOptions(3);
+    const upgradeOptions = pickWeighted(UPGRADE_DEFS, 3);
+    const combined = [];
+    pieceOptions.forEach(type => combined.push({ kind: 'piece', value: type }));
+    upgradeOptions.forEach(up => combined.push({ kind: 'upgrade', value: up }));
+    if (!combined.length) return;
+    for (let i = combined.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const tmp = combined[i];
+      combined[i] = combined[j];
+      combined[j] = tmp;
+    }
+    const chosen = combined.slice(0, 3);
+    const chosenPieces = chosen.filter(x => x.kind === 'piece').map(x => x.value);
+    const chosenUpgrades = chosen.filter(x => x.kind === 'upgrade').map(x => x.value);
+    if (!chosenPieces.length && !chosenUpgrades.length) return;
+    const options = { pieces: chosenPieces, upgrades: chosenUpgrades, mode: 'mixed' };
 
     this.state = "unlocking";
     this.isPaused = true;
     this.showUnlockModal(options);
   }
 
-  showUnlockModal(options, isPermanent = false) {
+  showUnlockModal(optionsOrPieces, isPermanent = false) {
     const modal = document.getElementById('unlock-overlay');
     const container = document.getElementById('unlock-options');
     if (!modal || !container) return;
@@ -852,6 +1023,7 @@ class Game {
     if (oldBtn) oldBtn.remove();
 
     container.innerHTML = '';
+    container.setAttribute('role', 'list');
     const title = document.querySelector('#unlock-overlay .overlay-title');
     const sub = document.querySelector('#unlock-overlay .unlock-subtitle');
 
@@ -859,14 +1031,29 @@ class Game {
       title.textContent = "Run Complete!";
       sub.textContent = "Choose one piece to KEEP permanently:";
     } else {
-      title.textContent = "Unlock New Piece";
-      sub.textContent = "Choose one to add to your current run:";
+      title.textContent = "Level Up";
+      sub.textContent = "Choose one new option:";
     }
 
-    options.forEach(type => {
+    const pieces = isPermanent ? optionsOrPieces : optionsOrPieces.pieces;
+    const upgrades = isPermanent ? [] : optionsOrPieces.upgrades;
+
+    (pieces || []).forEach(type => {
       const card = document.createElement('div');
       card.className = 'unlock-card';
-      card.onclick = () => isPermanent ? this.handlePermanentSelection(type) : this.handleUnlockSelection(type);
+      card.setAttribute('role', 'button');
+      card.tabIndex = 0;
+      const pieceLabel = isPermanent ? `Keep piece ${type} permanently` : `Add piece ${type} to this run`;
+      card.title = pieceLabel;
+      card.setAttribute('aria-label', pieceLabel);
+      const onSelect = () => isPermanent ? this.handlePermanentSelection(type) : this.handleUnlockSelection(type);
+      card.onclick = onSelect;
+      card.onkeydown = (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onSelect();
+        }
+      };
 
       const p = PIECES[type];
       const prev = document.createElement('div');
@@ -888,16 +1075,63 @@ class Game {
       container.appendChild(card);
     });
 
-    if (!isPermanent && !this.rerollUsed) {
+    if (!isPermanent && upgrades && upgrades.length) {
+      const divider = document.createElement('div');
+      divider.style.marginTop = '8px';
+      divider.style.color = 'var(--muted)';
+      divider.textContent = 'Upgrades';
+      container.appendChild(divider);
+      upgrades.forEach(up => {
+        const card = document.createElement('div');
+        card.className = 'unlock-card';
+        card.setAttribute('role', 'button');
+        card.tabIndex = 0;
+        const upLabel = up.desc ? `${up.name}: ${up.desc}` : up.name;
+        card.title = upLabel;
+        card.setAttribute('aria-label', upLabel);
+        const onSelect = () => this.applyUpgrade(up.id);
+        card.onclick = onSelect;
+        card.onkeydown = (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onSelect();
+          }
+        };
+        const prev = document.createElement('div');
+        prev.className = 'unlock-preview';
+        prev.textContent = up.icon;
+        prev.style.fontSize = '28px';
+        prev.style.display = 'flex';
+        prev.style.alignItems = 'center';
+        prev.style.justifyContent = 'center';
+        const label = document.createElement('div');
+        label.className = 'unlock-title';
+        label.textContent = up.name;
+        card.appendChild(prev);
+        card.appendChild(label);
+        container.appendChild(card);
+      });
+    }
+
+    const canReroll = !isPermanent && (this.tempUpgrades.rerollCharges > 0 || !this.rerollUsed);
+    if (canReroll) {
       const btn = document.createElement('button');
       btn.className = 'reroll-btn';
-      btn.textContent = 'Re-roll';
-      btn.onclick = () => this.handleReroll();
+      btn.textContent = this.tempUpgrades.rerollCharges > 0 ? `Re-roll (${this.tempUpgrades.rerollCharges})` : 'Re-roll';
+       btn.setAttribute('aria-label', 'Re-roll upgrade choices');
+      btn.onclick = () => {
+        if (this.tempUpgrades.rerollCharges > 0) this.tempUpgrades.rerollCharges--;
+        this.handleReroll();
+      };
       container.parentElement.appendChild(btn);
     }
 
     modal.classList.add('visible');
     modal.setAttribute('aria-hidden', 'false');
+    setTimeout(() => {
+      const firstCard = container.querySelector('.unlock-card');
+      if (firstCard) firstCard.focus();
+    }, 0);
   }
 
   handleReroll() {
@@ -924,6 +1158,184 @@ class Game {
     this.lastTime = performance.now();
     requestAnimationFrame(this.loop);
   }
+  recordUpgradeSelection(id) {
+    try {
+      const key = 'rogueTris_upgradeStats';
+      const raw = localStorage.getItem(key);
+      let data = {};
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object') data = parsed;
+      }
+      data[id] = (data[id] || 0) + 1;
+      localStorage.setItem(key, JSON.stringify(data));
+    } catch (e) {}
+  }
+  updateUpgradeIndicators() {
+    const ind = byId('upgrade-indicators');
+    if (!ind) return;
+    ind.innerHTML = '';
+    const addBadge = (text) => {
+      const b = document.createElement('div');
+      b.className = 'upgrade-badge';
+      b.textContent = text;
+      ind.appendChild(b);
+    };
+    if (this.tempUpgrades.speedUpLevels > 0) addBadge(`⚡ x${this.tempUpgrades.speedUpLevels}`);
+    if (this.tempUpgrades.rerollCharges > 0) addBadge(`🎲 x${this.tempUpgrades.rerollCharges}`);
+    if (this.tempUpgrades.shieldCharges > 0) addBadge(`🛡 x${this.tempUpgrades.shieldCharges}`);
+    if (this.tempUpgrades.scoreMultiplierLines > 0 && this.tempUpgrades.scoreMultiplier > 1) {
+      addBadge(`✖ ${this.tempUpgrades.scoreMultiplier} (${this.tempUpgrades.scoreMultiplierLines})`);
+    }
+    if (this.secondChanceAvailable) addBadge('❤️');
+    if (this.permUpgrades.expandedPreview) addBadge('🔭');
+    if (this.permUpgrades.obstacleMode) addBadge('🧱');
+    const speedMs = this.ticksForLevel();
+    if (speedMs > 0) {
+      const mult = Math.round((BASE_GRAVITY_MS / speedMs) * 10) / 10;
+      addBadge(`⏱ ${mult}x`);
+    }
+  }
+  applyUpgrade(id) {
+    this.recordUpgradeSelection(id);
+    if (id === 'speed_up') {
+      this.tempUpgrades.speedUpLevels = Math.max(this.tempUpgrades.speedUpLevels, 3);
+      achievementsEl.textContent = "Speed Up!";
+      this.triggerUpgradeEffect();
+    } else if (id === 'extra_reroll') {
+      this.tempUpgrades.rerollCharges += 1;
+      achievementsEl.textContent = "Extra Re-roll!";
+      this.triggerUpgradeEffect();
+    } else if (id === 'second_chance') {
+      this.secondChanceAvailable = true;
+      achievementsEl.textContent = "Second Chance ready!";
+      this.triggerUpgradeEffect();
+    } else if (id === 'expanded_preview') {
+      this.permUpgrades.expandedPreview = true;
+      achievementsEl.textContent = "Expanded Preview!";
+      this.triggerUpgradeEffect();
+    } else if (id === 'piece_removal') {
+      const candidates = [...this.currentPool];
+      if (!candidates.length) { this.closeUnlockModal(); return; }
+      this.startPieceRemovalSelection(candidates);
+      return;
+    } else if (id === 'obstacle_mode') {
+      this.permUpgrades.obstacleMode = true;
+      achievementsEl.textContent = "Challenge Mode!";
+      showWarningBanner("Challenge: Rising obstacles will appear as you level up.");
+      this.triggerUpgradeEffect();
+    } else if (id === 'invulnerability') {
+      this.tempUpgrades.shieldCharges += 3;
+      achievementsEl.textContent = "Invulnerability!";
+      this.triggerUpgradeEffect();
+    } else if (id === 'score_mult') {
+      this.tempUpgrades.scoreMultiplier = 2;
+      this.tempUpgrades.scoreMultiplierLines += 3;
+      achievementsEl.textContent = "Score Multiplier!";
+      this.triggerUpgradeEffect();
+    } else if (id === 'board_clear') {
+      const rowsToClear = 3;
+      for (let r = this.board.h - 1; r >= 0 && r > this.board.h - 1 - rowsToClear; r--) {
+        for (let c = 0; c < this.board.w; c++) {
+          this.board.grid[r][c] = 0;
+        }
+      }
+      achievementsEl.textContent = "Board Cleared!";
+      this.renderer.drawBoard();
+      this.triggerUpgradeEffect();
+    }
+    this.closeUnlockModal();
+    this.updateUpgradeIndicators();
+    this.state = "playing";
+    this.isPaused = false;
+    this.lastTime = performance.now();
+    requestAnimationFrame(this.loop);
+  }
+
+  startPieceRemovalSelection(candidates) {
+    const modal = document.getElementById('unlock-overlay');
+    const container = document.getElementById('unlock-options');
+    if (!modal || !container) return;
+    modal.classList.add('piece-removal-mode');
+    container.classList.add('piece-removal-mode');
+    container.innerHTML = '';
+    const title = modal.querySelector('.overlay-title');
+    const sub = modal.querySelector('.unlock-subtitle');
+    if (title) title.textContent = "Remove Piece";
+    if (sub) sub.textContent = "Choose one piece to remove from this run:";
+    let selected = null;
+    candidates.sort().slice(0, 30).forEach(type => {
+      const card = document.createElement('div');
+      card.className = 'unlock-card selectable';
+      card.title = `Remove ${type} from the pool`;
+      card.setAttribute('role', 'button');
+      card.tabIndex = 0;
+      card.setAttribute('aria-pressed', 'false');
+      const prev = document.createElement('div');
+      prev.className = 'unlock-preview';
+      const mini = this.createMiniPiece(type, 6);
+      mini.style.position = "absolute";
+      mini.style.top = "50%";
+      mini.style.left = "50%";
+      mini.style.transform = "translate(-50%, -50%)";
+      prev.appendChild(mini);
+      const label = document.createElement('div');
+      label.className = 'unlock-title';
+      label.textContent = type;
+      card.appendChild(prev);
+      card.appendChild(label);
+      const selectCard = () => {
+        const prevSel = container.querySelector('.unlock-card.selected');
+        if (prevSel) {
+          prevSel.classList.remove('selected');
+          prevSel.setAttribute('aria-pressed', 'false');
+        }
+        card.classList.add('selected');
+        card.setAttribute('aria-pressed', 'true');
+        selected = type;
+      };
+      card.onclick = selectCard;
+      card.onkeydown = (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          selectCard();
+        }
+      };
+      container.appendChild(card);
+    });
+    const confirm = document.createElement('button');
+    confirm.className = 'control-btn small-btn';
+    confirm.classList.add('piece-removal-confirm');
+    confirm.textContent = "Confirm removal";
+    confirm.onclick = () => {
+      if (!selected) return;
+      this.finishPieceRemoval(selected);
+    };
+    const inner = modal.querySelector('.overlay-inner');
+    if (inner) {
+      const existingConfirm = inner.querySelector('.piece-removal-confirm');
+      if (existingConfirm) existingConfirm.remove();
+      inner.appendChild(confirm);
+    } else {
+      container.appendChild(confirm);
+    }
+    modal.classList.add('visible');
+    modal.setAttribute('aria-hidden', 'false');
+  }
+
+  finishPieceRemoval(type) {
+    this.currentPool = this.currentPool.filter(p => p !== type);
+    this.removedPieces.push(type);
+    this.updatePoolDisplay();
+    achievementsEl.textContent = `Removed ${type}`;
+    this.triggerUpgradeEffect();
+    this.closeUnlockModal();
+    this.updateUpgradeIndicators();
+    this.state = "playing";
+    this.isPaused = false;
+    this.lastTime = performance.now();
+    requestAnimationFrame(this.loop);
+  }
 
   handlePermanentSelection(type) {
     if (!this.permanentPool.includes(type)) {
@@ -944,6 +1356,11 @@ class Game {
       overlayEl.classList.add("visible");
       overlayEl.setAttribute("aria-hidden", "false");
     }
+    if (this.pendingObstacleTimeout) {
+      clearTimeout(this.pendingObstacleTimeout);
+      this.pendingObstacleTimeout = null;
+    }
+    clearWarningBanner();
     this.active = null;
     if (pauseBtn) {
       pauseBtn.setAttribute("aria-pressed", "false");
@@ -957,6 +1374,15 @@ class Game {
     if (modal) {
       modal.classList.remove('visible');
       modal.setAttribute('aria-hidden', 'true');
+      modal.classList.remove('piece-removal-mode');
+    }
+    const container = document.getElementById('unlock-options');
+    if (container) {
+      container.classList.remove('piece-removal-mode');
+    }
+    if (modal) {
+      const existingConfirm = modal.querySelector('.piece-removal-confirm');
+      if (existingConfirm) existingConfirm.remove();
     }
     // Clear any visual guides and temporary elements
     this.clearVisualGuides();
@@ -976,6 +1402,26 @@ class Game {
     // Clear any temporary visual guide lines or elements
     const guideElements = document.querySelectorAll('.visual-guide, .temp-line, .guide-line');
     guideElements.forEach(el => el.remove());
+  }
+
+  scheduleObstacleRow() {
+    if (!this.permUpgrades.obstacleMode) return;
+    if (this.pendingObstacleTimeout) {
+      clearTimeout(this.pendingObstacleTimeout);
+      this.pendingObstacleTimeout = null;
+    }
+    showWarningBanner("Challenge: Rising obstacles in 3 seconds.");
+    if (this.warningAudioEnabled) {
+      playTone(440, 200, 0.08);
+    }
+    this.pendingObstacleTimeout = setTimeout(() => {
+      clearWarningBanner();
+      if (this.state === "playing") {
+        this.board.addObstacleRow();
+        this.renderer.drawBoard();
+      }
+      this.pendingObstacleTimeout = null;
+    }, 3000);
   }
 
   lockPiece() {
@@ -1005,14 +1451,25 @@ class Game {
       }
       this.spawnParticles(cleared);
       if (cleared.length > 1) this.showCombo(cleared.length);
-      const add = (scores[cleared.length] || 0) * this.level;
-      this.score += add;
+      const hadObstacles = Array.isArray(this.board.lastClearedHadObstacles) && this.board.lastClearedHadObstacles.some(Boolean);
+      const baseAdd = (scores[cleared.length] || 0) * this.level;
+      const add = hadObstacles ? baseAdd * 2 : baseAdd;
       this.combo++;
+      let comboBonus = 0;
       if (this.combo > 0) {
-        const comboBonus = 50 * this.combo * this.level;
-        this.score += comboBonus;
+        comboBonus = 50 * this.combo * this.level;
         achievementsEl.textContent = `Combo x${this.combo}`;
       }
+      let total = add + comboBonus;
+      if (this.tempUpgrades && this.tempUpgrades.scoreMultiplier > 1 && this.tempUpgrades.scoreMultiplierLines > 0) {
+        total = Math.floor(total * this.tempUpgrades.scoreMultiplier);
+        this.tempUpgrades.scoreMultiplierLines -= cleared.length;
+        if (this.tempUpgrades.scoreMultiplierLines <= 0) {
+          this.tempUpgrades.scoreMultiplierLines = 0;
+          this.tempUpgrades.scoreMultiplier = 1;
+        }
+      }
+      this.score += total;
       this.lines += cleared.length;
       this.linesSinceUnlock += cleared.length;
       const newLevel = 1 + Math.floor(this.lines / 10);
@@ -1020,6 +1477,13 @@ class Game {
         this.level = newLevel;
         tweenNumber(levelEl, this.level);
         achievementsEl.textContent = "Level Up!";
+        if (this.tempUpgrades.speedUpLevels > 0) {
+          this.tempUpgrades.speedUpLevels--;
+        }
+        if (this.permUpgrades.obstacleMode) {
+          this.scheduleObstacleRow();
+        }
+        this.updateUpgradeIndicators();
       }
       tweenNumber(scoreEl, this.score);
       tweenNumber(linesEl, this.lines);
@@ -1031,7 +1495,51 @@ class Game {
       }
       cleared = this.board.clearLines();
     }
+    this.updateUpgradeIndicators();
     if (this.board.grid[0].some(v => v)) {
+      if (this.secondChanceAvailable) {
+        this.secondChanceAvailable = false;
+        for (let r = 0; r < 3; r++) {
+          for (let c = 0; c < this.board.w; c++) {
+            this.board.grid[r][c] = 0;
+          }
+        }
+        achievementsEl.textContent = "Second Chance!";
+        this.renderer.drawBoard();
+        this.active = null;
+        this.spawn();
+        this.renderer.drawBoard();
+        return;
+      }
+      if (this.tempUpgrades && this.tempUpgrades.shieldCharges > 0) {
+        this.tempUpgrades.shieldCharges--;
+        for (let r = 0; r < 3; r++) {
+          for (let c = 0; c < this.board.w; c++) {
+            this.board.grid[r][c] = 0;
+          }
+        }
+        achievementsEl.textContent = "Shield!";
+        this.renderer.drawBoard();
+        this.active = null;
+        this.spawn();
+        this.renderer.drawBoard();
+        return;
+      }
+      if (this.tempUpgrades && this.tempUpgrades.shieldCharges > 0) {
+        this.tempUpgrades.shieldCharges--;
+        for (let r = 0; r < 3; r++) {
+          for (let c = 0; c < this.board.w; c++) {
+            this.board.grid[r][c] = 0;
+          }
+        }
+        achievementsEl.textContent = "Shield!";
+        this.renderer.drawBoard();
+        this.active = null;
+        this.spawn();
+        this.renderer.drawBoard();
+        this.updateUpgradeIndicators();
+        return;
+      }
       this.state = "gameover";
       this.isPaused = true;
 
@@ -1093,7 +1601,6 @@ class Game {
     const now = Date.now();
     if (now - this.lastHoldTime < this.holdCooldownTime) return;
     
-    // If no piece is currently held: move active to hold and spawn next
     if (!this.heldPiece) {
       const pieceData = { type: this.active.type, timestamp: now };
       try {
@@ -1110,10 +1617,8 @@ class Game {
       return;
     }
 
-    // If a piece is held: swap active with held and continue dropping
     const oldActiveType = this.active.type;
     const newPiece = new Piece(this.heldPiece.type);
-    // Validate default spawn; if invalid, try centered top fallback
     if (!this.valid(newPiece, 0, 0, newPiece.rot)) {
       newPiece.x = Math.floor(W / 2);
       newPiece.y = -2;
@@ -1170,7 +1675,6 @@ class Game {
       return;
     }
 
-    // Spawn held piece at default spawn position (not previous board coords)
     const newPiece = new Piece(this.heldPiece.type);
     if (!this.valid(newPiece, 0, 0, newPiece.rot)) {
       newPiece.x = Math.floor(W / 2);
@@ -1264,9 +1768,32 @@ class Game {
     };
     requestAnimationFrame(draw);
   }
+  triggerUpgradeEffect() {
+    const width = particlesCanvas.width;
+    const height = particlesCanvas.height;
+    const start = performance.now();
+    const draw = (now) => {
+      const k = now - start;
+      particlesCtx.clearRect(0,0,width,height);
+      const count = 80;
+      for (let i = 0; i < count; i++) {
+        const x = Math.random() * width;
+        const y = Math.random() * height * 0.3;
+        const t = (k + i * 12) % 800;
+        const alpha = 1 - t / 800;
+        particlesCtx.fillStyle = "rgba(255,216,0," + alpha + ")";
+        particlesCtx.beginPath();
+        particlesCtx.arc(x, y - t * 0.08, 2 + (1 - alpha) * 2, 0, Math.PI*2);
+        particlesCtx.fill();
+      }
+      if (k < 900) requestAnimationFrame(draw);
+    };
+    requestAnimationFrame(draw);
+  }
 }
 
 const game = new Game();
+runGravitySelfTest();
 
 const resetPoolBtn = document.getElementById("reset-pool-btn");
 const confirmOverlay = document.getElementById("confirm-overlay");

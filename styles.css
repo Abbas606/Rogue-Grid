@@ -9,8 +9,9 @@
   --shadow-elev-1: 0 4px 6px -1px rgba(0,0,0,0.3);
   --speed-slow: 0.3s;
   --cell-size: 26px;
-  --preview-cell-size: 20px;
+  --preview-cell-size: 18px;
   --cell-gap: 1px;
+  --layout-gap: 24px;
 }
 
 body {
@@ -34,16 +35,58 @@ body {
 }
 
 #game {
+  /* Grid System Specification:
+     - 3-column layout: Controls (Left), Board (Center), Stats (Right)
+     - precise coordinates ensuring no overlap
+     - 24px gap maintains spacing
+  */
+  display: grid;
+  grid-template-columns: 220px auto 220px;
+  grid-template-areas: 
+    "controls board stats";
+  gap: var(--layout-gap);
+  justify-content: center;
+  align-items: start;
   position: relative;
-  display: flex;
-  gap: 24px;
 }
 
 aside {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  width: 200px;
+  width: 100%; /* Adjusted for grid cell filling */
+}
+
+/* Grid-aligned sections */
+#preview-hold-row {
+  display: flex;
+  flex-direction: column; /* Vertical alignment as requested */
+  gap: 12px;
+  align-items: stretch;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+
+#controls-settings {
+  grid-area: controls;
+}
+
+/* Remove Gallery Button from UI */
+.bottombar {
+  display: none !important;
+}
+
+
+#sidebar {
+  grid-area: stats;
+}
+
+#board-wrap {
+  grid-area: board;
+  position: relative;
+  background: rgba(0,0,0,0.2);
+  border-radius: 4px;
+  padding: 4px;
 }
 
 .controls-card {
@@ -79,6 +122,12 @@ aside {
 .control-btn[aria-pressed="true"] { background: #ef4444; color: #fff; }
 
 .control-group { margin-bottom: 12px; }
+.toggle-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+}
 .control-label { display: block; margin-bottom: 4px; color: var(--muted); font-size: 0.9rem; }
 select {
   width: 100%;
@@ -135,7 +184,8 @@ select {
   transform: translate(-50%, -50%) scale(1.2);
 }
 
-#preview, #hold {
+#preview, #hold,
+#preview2, #hold2 {
   display: grid;
   grid-template-columns: repeat(6, var(--preview-cell-size));
   grid-template-rows: repeat(6, var(--preview-cell-size));
@@ -146,18 +196,31 @@ select {
   justify-content: center;
   align-content: center;
   width: fit-content;
-  margin: 0 auto;
+  margin: 0;
 }
 
+#preview-hold-row {
+  display: flex;
+  gap: 12px;
+  align-items: stretch;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+#preview-wrap,
 #hold-wrap {
   background: var(--surface);
   border: var(--border);
   border-radius: var(--radius);
   padding: 16px;
   box-shadow: var(--shadow-elev-1);
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
-#hold-title {
+#hold-title,
+#preview-title {
   color: var(--muted);
   font-size: 0.8rem;
   text-transform: uppercase;
@@ -165,6 +228,17 @@ select {
   margin-bottom: 12px;
   font-weight: 600;
   text-align: center;
+}
+
+.preview-pair {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+}
+
+.hold-pair {
+  justify-content: center;
 }
 
 
@@ -200,6 +274,41 @@ select {
 
 #hold-wrap.cooldown { opacity: 0.5; }
 
+.upgrade-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 8px;
+  margin: 4px 4px 0 0;
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 12px;
+  font-size: 0.8rem;
+  color: var(--muted);
+  background: rgba(255,255,255,0.06);
+}
+#upgrade-indicators {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 8px;
+}
+.upgrade-badge:nth-child(n+6) {
+  display: none;
+}
+.warning-banner-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+#warning-banner {
+  margin-top: 8px;
+  font-size: 0.8rem;
+  color: #facc15;
+  text-align: center;
+  min-height: 1.2em;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
 .metric {
   display: flex;
   justify-content: space-between;
@@ -238,6 +347,16 @@ select {
   text-align: center;
   max-width: 90vw;
   width: 400px;
+  max-height: 90vh;
+  transform: scale(0.96) translateY(8px);
+  opacity: 0;
+  transition: transform 0.25s ease, opacity 0.25s ease;
+}
+#overlay.visible .overlay-inner,
+#unlock-overlay.visible .overlay-inner,
+#confirm-overlay.visible .overlay-inner {
+  transform: scale(1) translateY(0);
+  opacity: 1;
 }
 
 .overlay-title {
@@ -289,6 +408,8 @@ select {
   justify-content: center;
   gap: 12px;
   margin-top: 16px;
+  max-height: 340px;
+  overflow-y: auto;
 }
 .unlock-card {
   background: rgba(255,255,255,0.05);
@@ -301,11 +422,28 @@ select {
   display: flex;
   flex-direction: column;
   align-items: center;
+  opacity: 0;
+  transform: translateY(8px) scale(0.96);
+  animation: unlock-card-in 0.25s ease forwards;
 }
 .unlock-card:hover {
   transform: translateY(-4px);
   background: rgba(255,255,255,0.1);
   border-color: var(--primary);
+}
+.unlock-card.selectable.selected {
+  border-color: var(--primary);
+  background: rgba(56,189,248,0.15);
+}
+@keyframes unlock-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 .unlock-preview {
   width: 60px;

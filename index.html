@@ -36,6 +36,13 @@
               <label class="control-label" for="release-key">Release</label>
               <select id="release-key" class="control-select"></select>
             </div>
+            <div class="control-group">
+              <label class="control-label" for="warning-sound-toggle">Warnings</label>
+              <label class="toggle-inline" title="Toggle audio beeps for obstacle and danger alerts">
+                <input type="checkbox" id="warning-sound-toggle" checked>
+                Audio warnings
+              </label>
+            </div>
           </div>
           <div class="controls-card">
             <div class="controls-title">Piece Pool</div>
@@ -49,51 +56,60 @@
           <div id="combo-visual" aria-hidden="true"></div>
         </div>
         <aside id="sidebar" aria-label="Game information">
-          <div id="preview-wrap" aria-label="Next piece preview">
-            <div id="preview-title">Next</div>
-            <div id="preview" role="img" aria-label="Next tetromino"></div>
-          </div>
-          <div id="hold-wrap" aria-label="Hold piece preview">
-            <div id="hold-title">Hold</div>
-            <div id="hold" role="img" aria-label="Held tetromino">
-              <div class="preview-cell"></div>
-              <div class="preview-cell"></div>
-              <div class="preview-cell"></div>
-              <div class="preview-cell"></div>
-              <div class="preview-cell"></div>
-              <div class="preview-cell"></div>
-              <div class="preview-cell"></div>
-              <div class="preview-cell"></div>
-              <div class="preview-cell"></div>
-              <div class="preview-cell"></div>
-              <div class="preview-cell"></div>
-              <div class="preview-cell"></div>
-              <div class="preview-cell"></div>
-              <div class="preview-cell"></div>
-              <div class="preview-cell"></div>
-              <div class="preview-cell"></div>
-              <div class="preview-cell"></div>
-              <div class="preview-cell"></div>
-              <div class="preview-cell"></div>
-              <div class="preview-cell"></div>
-              <div class="preview-cell"></div>
-              <div class="preview-cell"></div>
-              <div class="preview-cell"></div>
-              <div class="preview-cell"></div>
-              <div class="preview-cell"></div>
-              <div class="preview-cell"></div>
-              <div class="preview-cell"></div>
-              <div class="preview-cell"></div>
-              <div class="preview-cell"></div>
-              <div class="preview-cell"></div>
-              <div class="preview-cell"></div>
-              <div class="preview-cell"></div>
-              <div class="preview-cell"></div>
-              <div class="preview-cell"></div>
-              <div class="preview-cell"></div>
-              <div class="preview-cell"></div>
+          <div id="preview-hold-row" aria-label="Next and Hold sections">
+            <div id="preview-wrap" aria-label="Next piece preview">
+              <div id="preview-title">Next</div>
+              <div class="preview-pair">
+                <div id="preview" role="img" aria-label="Next tetromino"></div>
+                <div id="preview2" role="img" aria-label="Next tetromino (2)" style="display:none"></div>
+              </div>
+            </div>
+            <div id="hold-wrap" aria-label="Hold piece preview">
+              <div id="hold-title">Hold</div>
+              <div class="preview-pair hold-pair">
+                <div id="hold" role="img" aria-label="Held tetromino">
+                <div class="preview-cell"></div>
+                <div class="preview-cell"></div>
+                <div class="preview-cell"></div>
+                <div class="preview-cell"></div>
+                <div class="preview-cell"></div>
+                <div class="preview-cell"></div>
+                <div class="preview-cell"></div>
+                <div class="preview-cell"></div>
+                <div class="preview-cell"></div>
+                <div class="preview-cell"></div>
+                <div class="preview-cell"></div>
+                <div class="preview-cell"></div>
+                <div class="preview-cell"></div>
+                <div class="preview-cell"></div>
+                <div class="preview-cell"></div>
+                <div class="preview-cell"></div>
+                <div class="preview-cell"></div>
+                <div class="preview-cell"></div>
+                <div class="preview-cell"></div>
+                <div class="preview-cell"></div>
+                <div class="preview-cell"></div>
+                <div class="preview-cell"></div>
+                <div class="preview-cell"></div>
+                <div class="preview-cell"></div>
+                <div class="preview-cell"></div>
+                <div class="preview-cell"></div>
+                <div class="preview-cell"></div>
+                <div class="preview-cell"></div>
+                <div class="preview-cell"></div>
+                <div class="preview-cell"></div>
+                <div class="preview-cell"></div>
+                <div class="preview-cell"></div>
+                <div class="preview-cell"></div>
+                <div class="preview-cell"></div>
+                <div class="preview-cell"></div>
+                <div class="preview-cell"></div>
+              </div>
+              <div id="hold2" role="img" aria-label="Extra held tetromino" style="display:none"></div>
+              </div>
             </div>
           </div>
+          <div id="upgrade-indicators" aria-label="Active upgrades"></div>
           <div id="info">
             <div class="metric">
               <div class="label">Score</div>
@@ -109,6 +125,7 @@
             </div>
             <div id="achievements" aria-live="polite" aria-atomic="true"></div>
           </div>
+          <div id="warning-banner" aria-live="polite" aria-atomic="true"></div>
         </aside>
       </section>
       <section id="touchpad" aria-label="Touch controls">
