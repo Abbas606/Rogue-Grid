@@ -10,8 +10,10 @@
 <body>
   <main id="app">
     <div id="scale-root">
-      <header class="topbar">
-        <h1 aria-label="Game title">Rogue Grid</h1>
+      <header class="main-header">
+        <h1 class="game-title" aria-label="Game title">Rogue Grid</h1>
+      </header>
+      <div class="topbar">
         <div class="top-controls">
           <button id="start-btn" type="button" aria-label="Start game" class="control-btn">Start</button>
           <button id="pause-btn" type="button" aria-pressed="false" aria-label="Pause or play" class="control-btn">Pause</button>
@@ -27,7 +29,7 @@
             </button>
           </div>
         </div>
-      </header>
+      </div>
       <section id="game" aria-label="Tetris game area">
         <aside id="controls-settings" aria-label="Controls settings">
           <div class="controls-card">

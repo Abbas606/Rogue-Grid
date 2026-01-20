@@ -253,15 +253,18 @@ class Board {
     const cleared = [];
     const clearedHadObstacles = [];
     for (let r = this.h - 1; r >= 0; r--) {
-      if (this.grid[r].every(v => v)) {
+      if (this.grid[r].every(v => v !== 0)) {
         let maxObstacleLevel = 0;
+        let hasObstacle = false;
         for (let c = 0; c < this.w; c++) {
           const v = this.grid[r][c];
           if (this.isObstacleCell(v)) {
+            hasObstacle = true;
             const n = parseInt(String(v).slice(2), 10);
             if (Number.isFinite(n) && n > maxObstacleLevel) maxObstacleLevel = n;
           }
         }
+        
         if (maxObstacleLevel > 1) {
           for (let c = 0; c < this.w; c++) {
             const v = this.grid[r][c];
@@ -277,17 +280,38 @@ class Board {
             }
           }
         } else {
-          const hadOb = this.grid[r].some(v => this.isObstacleCell(v));
-          cleared.push(r);
-          clearedHadObstacles.push(hadOb);
-          this.grid.splice(r, 1);
-          this.grid.unshift(Array(this.w).fill(0));
-          r++;
+          for (let c = 0; c < this.w; c++) {
+            this.grid[r][c] = 0;
+          }
         }
+        
+        cleared.push(r);
+        clearedHadObstacles.push(hasObstacle);
       }
     }
     this.lastClearedHadObstacles = clearedHadObstacles;
     return cleared;
+  }
+
+  applyGravity() {
+    let moved = false;
+    for (let c = 0; c < this.w; c++) {
+      let writeRow = this.h - 1;
+      for (let r = this.h - 1; r >= 0; r--) {
+        const v = this.grid[r][c];
+        if (this.isObstacleCell(v)) {
+          writeRow = r - 1;
+        } else if (v !== 0) {
+          if (r !== writeRow) {
+            this.grid[writeRow][c] = v;
+            this.grid[r][c] = 0;
+            moved = true;
+          }
+          writeRow--;
+        }
+      }
+    }
+    return moved;
   }
   addObstacleRowPattern(pattern) {
     const topRow = this.grid[0];
@@ -784,18 +808,35 @@ class Game {
 
   resetObjectivesForLevel() {
     const level = this.level || 1;
-    const linesTarget = 6 + (level - 1) * 2;
-    const scoreTarget = 800 * level;
-    let obstaclesTarget = 0;
+    
+    // Progressive Difficulty: 1 objective (Lv1-3), 2 (Lv4-6), 3 (Lv7+)
+    const activeCount = level < 4 ? 1 : (level < 7 ? 2 : 3);
+    
+    // Calculate potential targets
+    const linesTargetVal = 6 + (level - 1) * 2;
+    const scoreTargetVal = 800 * level;
+    let obstaclesTargetVal = 0;
     if (this.permUpgrades && this.permUpgrades.obstacleMode) {
       const raw = 4 + level;
-      obstaclesTarget = raw > 12 ? 12 : raw;
+      obstaclesTargetVal = raw > 12 ? 12 : raw;
     }
+    
+    // Available objective types
+    const types = ['lines', 'score'];
+    if (obstaclesTargetVal > 0) types.push('obstacles');
+    
+    // Shuffle and pick activeCount
+    for (let i = types.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [types[i], types[j]] = [types[j], types[i]];
+    }
+    const selected = new Set(types.slice(0, activeCount));
+    
     this.objectives = {
       level,
-      targetLines: linesTarget,
-      targetScore: scoreTarget,
-      targetObstacles: obstaclesTarget,
+      targetLines: selected.has('lines') ? linesTargetVal : 0,
+      targetScore: selected.has('score') ? scoreTargetVal : 0,
+      targetObstacles: selected.has('obstacles') ? obstaclesTargetVal : 0,
       progressLines: 0,
       progressScore: 0,
       progressObstacles: 0
@@ -1755,17 +1796,21 @@ class Game {
     const w = this.board.w;
     const pattern = Array(w).fill(0);
     const mode = Math.floor(Math.random() * 3);
+    
+    // Density calculation: increases with level, maxes at 0.8
+    const density = Math.min(0.8, 0.3 + (this.level * 0.05));
+    
     if (mode === 0) {
-      const span = Math.max(2, Math.min(4, w));
+      const span = Math.max(2, Math.min(Math.floor(w * density * 1.5), w));
       const start = Math.max(0, Math.floor(Math.random() * (w - span)));
       for (let c = start; c < start + span; c++) pattern[c] = 1;
     } else if (mode === 1) {
       for (let c = 0; c < w; c++) {
-        if (c % 2 === 0) pattern[c] = 1;
+        if (c % 2 === 0 || Math.random() < (density - 0.3)) pattern[c] = 1;
       }
     } else {
       for (let c = 0; c < w; c++) {
-        if (Math.random() < 0.5) pattern[c] = 1;
+        if (Math.random() < density) pattern[c] = 1;
       }
     }
     if (!pattern.some(v => v)) {
@@ -1820,22 +1865,7 @@ class Game {
       achievementsEl.textContent = "";
     }
     while (cleared.length) {
-      for (let c = 0; c < this.board.w; c++) {
-        const stack = [];
-        for (let r = 0; r < this.board.h; r++) {
-          const v = this.board.grid[r][c];
-          if (v) stack.push(v);
-        }
-        let r = this.board.h - 1;
-        while (stack.length) {
-          this.board.grid[r][c] = stack.pop();
-          r--;
-        }
-        while (r >= 0) {
-          this.board.grid[r][c] = 0;
-          r--;
-        }
-      }
+      this.board.applyGravity();
       this.spawnParticles(cleared);
       if (cleared.length > 1) this.showCombo(cleared.length);
       const hadObstacles = Array.isArray(this.board.lastClearedHadObstacles) && this.board.lastClearedHadObstacles.some(Boolean);
