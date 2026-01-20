@@ -1,23 +1,31 @@
 "use strict";
 
-const W = 10;
+const BASE_W = 10;
+let W = BASE_W;
 const H = 20;
+const MAX_EXTRA_BOARD_COLS = 5;
 const LOCK_DELAY_MS = 500;
 const BASE_GRAVITY_MS = 1000;
 const SOFT_DROP_MS = 40;
 
+const SPEEDUP_BASE_INCREMENT = 1;
+const SPEEDUP_RANDOM_RANGE = 0.25;
+const SPEEDUP_MIN_MS = 120;
 const computeGravity = (level, speedUpLevels) => {
   const base = BASE_GRAVITY_MS;
   const lv = Math.max(1, level | 0);
-  const su = Math.max(0, speedUpLevels | 0);
+  const su = Math.max(0, speedUpLevels || 0);
   const levelFactor = Math.pow(0.9, lv - 1);
-  const upgradeFactor = Math.pow(0.85, su);
+  const upgradeBase = 0.85;
+  const upgradeFactor = Math.pow(upgradeBase, su);
   const ms = base * levelFactor * upgradeFactor;
-  return Math.max(200, Math.floor(ms));
+  const clamped = Math.max(SPEEDUP_MIN_MS, Math.floor(ms));
+  return clamped;
 };
 
 const byId = (id) => document.getElementById(id);
 const boardEl = byId("board");
+const boardWrapEl = byId("board-wrap");
 const previewEl = byId("preview");
 const holdEl = byId("hold");
 const warningBannerEl = byId("warning-banner");
@@ -25,6 +33,10 @@ const scoreEl = byId("score");
 const linesEl = byId("lines");
 const levelEl = byId("level");
 const achievementsEl = byId("achievements");
+const objectivesEl = byId("objectives");
+const objLinesEl = byId("obj-lines");
+const objObstaclesEl = byId("obj-obstacles");
+const objScoreEl = byId("obj-score");
 const pauseBtn = byId("pause-btn");
 const startBtn = byId("start-btn");
 const overlayEl = byId("overlay");
@@ -40,6 +52,12 @@ const controlsMovementRadios = document.querySelectorAll('input[name="move-schem
 const holdKeySelect = byId("hold-key");
 const releaseKeySelect = byId("release-key");
 const warningSoundToggle = byId("warning-sound-toggle");
+const clearRowBtn = byId("clear-row-btn");
+const clearColBtn = byId("clear-column-btn");
+const clearAreaBtn = byId("clear-area-btn");
+const clearRowCountEl = byId("clear-row-count");
+const clearColCountEl = byId("clear-column-count");
+const clearAreaCountEl = byId("clear-area-count");
 let autoScale = 1;
 const computeAutoScale = () => {
   if (!scaleRoot) return 1;
@@ -57,9 +75,18 @@ const applyScale = (s) => {
   if (!scaleRoot) return;
   scaleRoot.style.transform = "scale(" + s + ")";
 };
+const updatePreviewCellSize = () => {
+  const rootStyle = getComputedStyle(document.documentElement);
+  const base = parseInt(rootStyle.getPropertyValue("--cell-size"), 10) || 26;
+  const maxSize = base * 0.9;
+  const minSize = 10;
+  const previewSize = Math.max(minSize, Math.min(maxSize, Math.round(base * 0.7)));
+  document.documentElement.style.setProperty("--preview-cell-size", previewSize + "px");
+};
 const recalcScale = () => {
   autoScale = computeAutoScale();
   applyScale(autoScale);
+  updatePreviewCellSize();
 };
 window.addEventListener("resize", recalcScale);
 recalcScale();
@@ -82,6 +109,8 @@ const previewEl2 = byId("preview2");
 if (previewEl2) makeCells(previewEl2, 6, 6, "preview-cell");
 const holdEl2 = byId("hold2");
 if (holdEl2) makeCells(holdEl2, 6, 6, "preview-cell");
+const holdEl3 = byId("hold3");
+if (holdEl3) makeCells(holdEl3, 6, 6, "preview-cell");
 particlesCanvas.width = boardEl.clientWidth;
 particlesCanvas.height = boardEl.clientHeight;
 particlesCtx = particlesCanvas.getContext("2d");
@@ -163,15 +192,18 @@ const SRS_I_LEFT = {
 const STANDARD_PIECES = ['I', 'O', 'T', 'L', 'J', 'S', 'Z'];
 
 const UPGRADE_DEFS = [
-  { id: 'speed_up', name: 'Speed Up', type: 'temp', weight: 3, icon: '⚡', desc: 'Stacking speed boost for a few levels' },
+  { id: 'speed_up', name: 'Speed Up', type: 'temp', weight: 3, icon: '⚡', desc: 'Increase core speed up rate each level' },
   { id: 'extra_reroll', name: 'Extra Re-roll', type: 'temp', weight: 2, icon: '🎲', desc: '+1 reroll next choice' },
   { id: 'second_chance', name: 'Second Chance', type: 'temp', weight: 1, icon: '❤️', desc: 'Survive game over once' },
-  { id: 'invulnerability', name: 'Invulnerability', type: 'temp', weight: 1, icon: '🛡️', desc: 'Ignore game over a few times' },
   { id: 'score_mult', name: 'Score Multiplier', type: 'temp', weight: 2, icon: '✖', desc: 'Double score for a few clears' },
-  { id: 'board_clear', name: 'Board Blast', type: 'temp', weight: 1, icon: '💥', desc: 'Clear bottom rows instantly' },
-  { id: 'expanded_preview', name: 'Expanded Preview', type: 'perm', weight: 2, icon: '🔭', desc: 'Show +1 next piece' },
+  { id: 'clear_row', name: 'Clear Row', type: 'temp', weight: 1, icon: '➖', desc: 'Gain a consumable that clears a random row' },
+  { id: 'clear_column', name: 'Clear Column', type: 'temp', weight: 1, icon: '➕', desc: 'Gain a consumable that clears a random column' },
+  { id: 'clear_area', name: 'Clear Area', type: 'temp', weight: 1, icon: '⛰', desc: 'Gain a consumable that clears a 3x3 area' },
+  { id: 'expanded_preview', name: '+1 Next', type: 'perm', weight: 2, icon: '🔭', desc: 'Show +1 next piece' },
+  { id: 'expanded_hold', name: '+1 Hold', type: 'perm', weight: 2, icon: '📥', desc: 'Add an extra timed hold cell' },
+  { id: 'expand_board', name: '+1 Board', type: 'perm', weight: 1, icon: '⬌', desc: 'Add one column to the board (max +5)' },
   { id: 'piece_removal', name: 'Remove Piece', type: 'perm', weight: 2, icon: '🗑️', desc: 'Remove a piece type' },
-  { id: 'obstacle_mode', name: 'Obstacle Mode', type: 'perm', weight: 1, icon: '🧱', desc: 'Rising bricks, double points' },
+  { id: 'obstacle_mode', name: 'Obstacle Focus', type: 'perm', weight: 1, icon: '🧱', desc: 'Stronger obstacles that give more points' },
 ];
 const pickWeighted = (items, count) => {
   const pool = [];
@@ -200,7 +232,9 @@ class Board {
     this.w = w; this.h = h;
     this.grid = Array.from({ length: h }, () => Array(w).fill(0));
   }
-  isObstacleCell(v) { return v === 'OB2' || v === 'OB1'; }
+  isObstacleCell(v) {
+    return typeof v === 'string' && v.startsWith('OB');
+  }
   get(r, c) {
     if (r < 0 || r >= this.h || c < 0 || c >= this.w) return null;
     return this.grid[r][c];
@@ -220,11 +254,27 @@ class Board {
     const clearedHadObstacles = [];
     for (let r = this.h - 1; r >= 0; r--) {
       if (this.grid[r].every(v => v)) {
-        const hasOb2 = this.grid[r].some(v => this.isObstacleCell(v) && v === 'OB2');
-        if (hasOb2) {
+        let maxObstacleLevel = 0;
+        for (let c = 0; c < this.w; c++) {
+          const v = this.grid[r][c];
+          if (this.isObstacleCell(v)) {
+            const n = parseInt(String(v).slice(2), 10);
+            if (Number.isFinite(n) && n > maxObstacleLevel) maxObstacleLevel = n;
+          }
+        }
+        if (maxObstacleLevel > 1) {
           for (let c = 0; c < this.w; c++) {
             const v = this.grid[r][c];
-            this.grid[r][c] = (v === 'OB2') ? 'OB1' : 0;
+            if (this.isObstacleCell(v)) {
+              const n = parseInt(String(v).slice(2), 10);
+              if (Number.isFinite(n) && n > 1) {
+                this.grid[r][c] = 'OB' + (n - 1);
+              } else {
+                this.grid[r][c] = 0;
+              }
+            } else {
+              this.grid[r][c] = 0;
+            }
           }
         } else {
           const hadOb = this.grid[r].some(v => this.isObstacleCell(v));
@@ -238,6 +288,28 @@ class Board {
     }
     this.lastClearedHadObstacles = clearedHadObstacles;
     return cleared;
+  }
+  addObstacleRowPattern(pattern) {
+    const topRow = this.grid[0];
+    const hasBlocksInTop = topRow.some(v => v && !this.isObstacleCell(v));
+    if (hasBlocksInTop) {
+      for (let c = 0; c < this.w; c++) {
+        if (!this.isObstacleCell(topRow[c])) {
+          topRow[c] = topRow[c];
+        }
+      }
+    }
+    this.grid.shift();
+    const row = Array(this.w).fill(0);
+    for (let c = 0; c < this.w; c++) {
+      if (pattern && pattern[c]) {
+        let lvl = pattern[c];
+        if (!Number.isFinite(lvl)) lvl = 2;
+        lvl = Math.max(2, Math.floor(lvl));
+        row[c] = 'OB' + lvl;
+      }
+    }
+    this.grid.push(row);
   }
   addObstacleRow() {
     const topRow = this.grid[0];
@@ -300,6 +372,7 @@ class Renderer {
         el.style.opacity = '';
         if (v) {
           if (v === 'OB2' || v === 'OB1') {
+            el.classList.add('obstacle-cell');
             el.style.backgroundColor = v === 'OB2' ? '#6b7280' : '#9ca3af';
           } else {
             el.style.backgroundColor = PIECES[v].color;
@@ -410,7 +483,7 @@ class Renderer {
     if (previewWrap) { previewWrap.classList.add("active"); setTimeout(()=>previewWrap.classList.remove("active"), 220); }
   }
 
-  drawHold(heldPiece) {
+  drawHold(heldPiece, helperType) {
     const cells = Array.from(holdEl.children);
     for (const c of cells) {
       c.style.backgroundColor = '';
@@ -420,27 +493,51 @@ class Renderer {
       holdEl.getBoundingClientRect();
       holdEl.style.transition = "opacity 200ms ease";
       holdEl.style.opacity = "1";
-      return;
-    }
-    const piece = new Piece(heldPiece.type);
-    const shape = piece.shape();
-    const color = PIECES[heldPiece.type].color;
-    const w = shape[0].length;
-    const h = shape.length;
-    const startX = Math.floor((6 - w) / 2);
-    const startY = Math.floor((6 - h) / 2);
-    for (let r = 0; r < h; r++) {
-      for (let c = 0; c < w; c++) {
-        if (shape[r][c]) {
-          const idx = (startY + r) * 6 + (startX + c);
-          cells[idx].style.backgroundColor = color;
+    } else {
+      const piece = new Piece(heldPiece.type);
+      const shape = piece.shape();
+      const color = PIECES[heldPiece.type].color;
+      const w = shape[0].length;
+      const h = shape.length;
+      const startX = Math.floor((6 - w) / 2);
+      const startY = Math.floor((6 - h) / 2);
+      for (let r = 0; r < h; r++) {
+        for (let c = 0; c < w; c++) {
+          if (shape[r][c]) {
+            const idx = (startY + r) * 6 + (startX + c);
+            cells[idx].style.backgroundColor = color;
+          }
         }
       }
+      holdEl.style.opacity = "0";
+      holdEl.getBoundingClientRect();
+      holdEl.style.transition = "opacity 200ms ease";
+      holdEl.style.opacity = "1";
     }
-    holdEl.style.opacity = "0";
-    holdEl.getBoundingClientRect();
-    holdEl.style.transition = "opacity 200ms ease";
-    holdEl.style.opacity = "1";
+    if (holdEl2) {
+      const cells2 = Array.from(holdEl2.children);
+      for (const c of cells2) c.style.backgroundColor = '';
+      if (helperType) {
+        const piece2 = new Piece(helperType);
+        const shape2 = piece2.shape();
+        const color2 = PIECES[helperType].color;
+        const w2 = shape2[0].length;
+        const h2 = shape2.length;
+        const startX2 = Math.floor((6 - w2) / 2);
+        const startY2 = Math.floor((6 - h2) / 2);
+        for (let r = 0; r < h2; r++) {
+          for (let c = 0; c < w2; c++) {
+            if (shape2[r][c]) {
+              const idx2 = (startY2 + r) * 6 + (startX2 + c);
+              cells2[idx2].style.backgroundColor = color2;
+            }
+          }
+        }
+        holdEl2.style.display = "grid";
+      } else {
+        holdEl2.style.display = "none";
+      }
+    }
   }
 }
 
@@ -490,27 +587,48 @@ class Game {
     this.linesSinceUnlock = 0;
     this.unlockThreshold = 10;
 
-    // Upgrade state
+    this.speedUpConfig = {
+      basePerUpgrade: SPEEDUP_BASE_INCREMENT,
+      randomRange: SPEEDUP_RANDOM_RANGE,
+      maxMultiplier: BASE_GRAVITY_MS / SPEEDUP_MIN_MS,
+    };
+    this.speedUpPerLevel = 1;
     this.tempUpgrades = {
       speedUpLevels: 0,
       rerollCharges: 0,
       shieldCharges: 0,
       scoreMultiplier: 1,
       scoreMultiplierLines: 0,
+      clearRowCharges: 0,
+      clearColumnCharges: 0,
+      clearAreaCharges: 0,
     };
     this.secondChanceAvailable = false;
-    this.permUpgrades = { expandedPreview: false, obstacleMode: false };
+    this.permUpgrades = {
+      expandedPreview: false,
+      expandedHold: false,
+      obstacleMode: true,
+    };
     this.removedPieces = [];
     this.warningAudioEnabled = true;
     this.pendingObstacleTimeout = null;
+    this.piecesSinceObstacle = 0;
+
+    this.objectives = null;
+    this.extraBoardColumns = 0;
 
     // Hold/Release System
-    this.heldPiece = null;
+    this.holdSlots = [];
     this.holdCooldown = 0;
-    this.holdCooldownTime = 500; // 500ms cooldown
+    this.holdCooldownTime = 500;
     this.lastHoldTime = 0;
-    this.holdStorageKey = 'rogueTris_heldPiece';
-    this.holdExpirationTime = 5 * 60 * 1000; // 5 minutes in milliseconds
+    this.holdCapacity = 1;
+    this.maxExtraHolds = 2;
+    this.extraHoldConfig = [3, 5];
+
+    this.obstacleScoreMultiplier = 2;
+    this.obstaclePieceInterval = 4;
+    this.obstacleUpgradeLevel = 0;
 
     this.loop = this.loop.bind(this);
     this.bindInput();
@@ -550,7 +668,16 @@ class Game {
         this.warningAudioEnabled = warningSoundToggle.checked;
       });
     }
-    
+    if (clearRowBtn) {
+      clearRowBtn.addEventListener("click", () => this.useClearRow());
+    }
+    if (clearColBtn) {
+      clearColBtn.addEventListener("click", () => this.useClearColumn());
+    }
+    if (clearAreaBtn) {
+      clearAreaBtn.addEventListener("click", () => this.useClearArea());
+    }
+
     // Add event listener for unlock modal closure
     window.addEventListener('unlockModalClosed', () => {
       this.clearVisualGuides();
@@ -561,6 +688,10 @@ class Game {
         this.renderer.drawActive(this.active);
       }
     });
+
+    this.updateBoardDimensions();
+    this.resetObjectivesForLevel();
+    this.updateObjectivesDisplay();
   }
 
   loadPool() {
@@ -636,6 +767,101 @@ class Game {
     if (pauseBtn) pauseBtn.disabled = true;
     const ind = byId('upgrade-indicators');
     if (ind) ind.innerHTML = '';
+    this.updateConsumableButtons();
+    this.updateObjectivesDisplay();
+  }
+
+  updateBoardDimensions() {
+    if (!this.board || !boardEl) return;
+    const cols = this.board.w;
+    boardEl.style.gridTemplateColumns = "repeat(" + cols + ", var(--cell-size))";
+    boardEl.setAttribute("aria-colcount", String(cols));
+    if (particlesCanvas) {
+      particlesCanvas.width = boardEl.clientWidth;
+      particlesCanvas.height = boardEl.clientHeight;
+    }
+  }
+
+  resetObjectivesForLevel() {
+    const level = this.level || 1;
+    const linesTarget = 6 + (level - 1) * 2;
+    const scoreTarget = 800 * level;
+    let obstaclesTarget = 0;
+    if (this.permUpgrades && this.permUpgrades.obstacleMode) {
+      const raw = 4 + level;
+      obstaclesTarget = raw > 12 ? 12 : raw;
+    }
+    this.objectives = {
+      level,
+      targetLines: linesTarget,
+      targetScore: scoreTarget,
+      targetObstacles: obstaclesTarget,
+      progressLines: 0,
+      progressScore: 0,
+      progressObstacles: 0
+    };
+  }
+
+  updateObjectivesDisplay() {
+    if (!objectivesEl) return;
+    const infoEl = byId("info");
+    if (!this.objectives || this.state === "gameover") {
+      objectivesEl.style.display = "none";
+      if (infoEl) infoEl.style.display = "";
+      if (objLinesEl) objLinesEl.textContent = "";
+      if (objScoreEl) objScoreEl.textContent = "";
+      if (objObstaclesEl) objObstaclesEl.textContent = "";
+      return;
+    }
+    objectivesEl.style.display = "block";
+    if (infoEl) infoEl.style.display = "none";
+    const obj = this.objectives;
+    if (objLinesEl) {
+      objLinesEl.textContent = obj.progressLines + " / " + obj.targetLines;
+    }
+    if (objScoreEl) {
+      objScoreEl.textContent = obj.progressScore + " / " + obj.targetScore;
+    }
+    if (objObstaclesEl) {
+      if (obj.targetObstacles > 0) {
+        objObstaclesEl.textContent = obj.progressObstacles + " / " + obj.targetObstacles;
+      } else {
+        objObstaclesEl.textContent = "0 / 0";
+      }
+    }
+  }
+
+  checkObjectivesComplete() {
+    const obj = this.objectives;
+    if (!obj) return false;
+    if (obj.targetLines > 0 && obj.progressLines < obj.targetLines) return false;
+    if (obj.targetScore > 0 && obj.progressScore < obj.targetScore) return false;
+    if (obj.targetObstacles > 0 && obj.progressObstacles < obj.targetObstacles) return false;
+    return true;
+  }
+
+  handleLevelUp() {
+    if (!this.objectives) return;
+    this.level = (this.level || 1) + 1;
+    tweenNumber(levelEl, this.level);
+    achievementsEl.textContent = "Level Up!";
+    this.updateUpgradeIndicators();
+    this.resetObjectivesForLevel();
+    this.updateObjectivesDisplay();
+    this.unlock();
+  }
+  updateConsumableButtons() {
+    if (!clearRowBtn || !clearColBtn || !clearAreaBtn) return;
+    const rowCount = this.tempUpgrades ? this.tempUpgrades.clearRowCharges || 0 : 0;
+    const colCount = this.tempUpgrades ? this.tempUpgrades.clearColumnCharges || 0 : 0;
+    const areaCount = this.tempUpgrades ? this.tempUpgrades.clearAreaCharges || 0 : 0;
+    if (clearRowCountEl) clearRowCountEl.textContent = String(rowCount);
+    if (clearColCountEl) clearColCountEl.textContent = String(colCount);
+    if (clearAreaCountEl) clearAreaCountEl.textContent = String(areaCount);
+    const canUse = this.state === "playing" && !this.isPaused;
+    clearRowBtn.disabled = !(rowCount > 0 && canUse);
+    clearColBtn.disabled = !(colCount > 0 && canUse);
+    clearAreaBtn.disabled = !(areaCount > 0 && canUse);
   }
   start() {
     this.reset();
@@ -736,6 +962,7 @@ class Game {
         }
       }
     }
+    this.updateHoldDisplay();
   }
   reset() {
     this.board = new Board(W, H);
@@ -756,6 +983,9 @@ class Game {
     clearWarningBanner();
     this.updatePoolDisplay();
 
+    this.resetObjectivesForLevel();
+    this.updateBoardDimensions();
+
     this.spawn();
     tweenNumber(scoreEl, this.score);
     tweenNumber(linesEl, this.lines);
@@ -769,7 +999,12 @@ class Game {
   }
   ticksForLevel() {
     const su = this.tempUpgrades ? this.tempUpgrades.speedUpLevels : 0;
-    return computeGravity(this.level, su);
+    const raw = computeGravity(this.level, su);
+    if (this.speedUpConfig && this.speedUpConfig.maxMultiplier) {
+      const minMs = BASE_GRAVITY_MS / this.speedUpConfig.maxMultiplier;
+      return Math.max(minMs, raw);
+    }
+    return raw;
   }
   valid(piece, dx, dy, rot = piece.rot) {
     for (const [bx,by] of piece.blocks(rot)) {
@@ -899,6 +1134,7 @@ class Game {
         this.isPaused = true;
         pauseBtn.setAttribute("aria-pressed","true");
         pauseBtn.textContent = "Play";
+        this.updateConsumableButtons();
       } else if (this.state === "paused") {
         this.state = "playing";
         this.isPaused = false;
@@ -906,6 +1142,7 @@ class Game {
         pauseBtn.textContent = "Pause";
         this.lastTime = performance.now();
         requestAnimationFrame(this.loop);
+        this.updateConsumableButtons();
       }
     });
     if (startBtn) startBtn.addEventListener("click", () => { this.start(); });
@@ -1140,7 +1377,11 @@ class Game {
   }
 
   resetPermanentPool() {
-    this.permanentPool = [...STANDARD_PIECES];
+    const allPieces = Object.keys(PIECES);
+    const shuffled = bagRandom(allPieces);
+    const count = 10;
+    const selected = shuffled.slice(0, Math.min(count, shuffled.length));
+    this.permanentPool = selected;
     this.savePool();
     this.currentPool = [...this.permanentPool];
     this.runUnlocks = [];
@@ -1175,33 +1416,45 @@ class Game {
     const ind = byId('upgrade-indicators');
     if (!ind) return;
     ind.innerHTML = '';
-    const addBadge = (text) => {
+    const addBadge = (text, extraClass) => {
       const b = document.createElement('div');
-      b.className = 'upgrade-badge';
+      b.className = 'upgrade-badge' + (extraClass ? ' ' + extraClass : '');
       b.textContent = text;
       ind.appendChild(b);
     };
-    if (this.tempUpgrades.speedUpLevels > 0) addBadge(`⚡ x${this.tempUpgrades.speedUpLevels}`);
+    if (this.tempUpgrades.speedUpLevels > 0) {
+      const v = this.tempUpgrades.speedUpLevels;
+      const label = Number.isInteger(v) ? String(v) : v.toFixed(1);
+      addBadge(`⚡ x${label}`);
+    }
     if (this.tempUpgrades.rerollCharges > 0) addBadge(`🎲 x${this.tempUpgrades.rerollCharges}`);
     if (this.tempUpgrades.shieldCharges > 0) addBadge(`🛡 x${this.tempUpgrades.shieldCharges}`);
+    if (this.tempUpgrades.clearRowCharges > 0) addBadge(`➖ x${this.tempUpgrades.clearRowCharges}`);
+    if (this.tempUpgrades.clearColumnCharges > 0) addBadge(`➕ x${this.tempUpgrades.clearColumnCharges}`);
+    if (this.tempUpgrades.clearAreaCharges > 0) addBadge(`⛰ x${this.tempUpgrades.clearAreaCharges}`);
     if (this.tempUpgrades.scoreMultiplierLines > 0 && this.tempUpgrades.scoreMultiplier > 1) {
       addBadge(`✖ ${this.tempUpgrades.scoreMultiplier} (${this.tempUpgrades.scoreMultiplierLines})`);
     }
     if (this.secondChanceAvailable) addBadge('❤️');
     if (this.permUpgrades.expandedPreview) addBadge('🔭');
-    if (this.permUpgrades.obstacleMode) addBadge('🧱');
+    if (this.holdCapacity && this.holdCapacity > 1) addBadge('📥');
+    if (this.obstacleScoreMultiplier && this.obstacleScoreMultiplier > 2) addBadge('🧱');
     const speedMs = this.ticksForLevel();
     if (speedMs > 0) {
       const mult = Math.round((BASE_GRAVITY_MS / speedMs) * 10) / 10;
-      addBadge(`⏱ ${mult}x`);
+      addBadge(`⏱ ${mult}x`, 'speed-badge');
     }
   }
   applyUpgrade(id) {
     this.recordUpgradeSelection(id);
     if (id === 'speed_up') {
-      this.tempUpgrades.speedUpLevels = Math.max(this.tempUpgrades.speedUpLevels, 3);
+      const cfg = this.speedUpConfig || {};
+      const base = typeof cfg.basePerUpgrade === 'number' ? cfg.basePerUpgrade : 1;
+      const range = typeof cfg.randomRange === 'number' ? cfg.randomRange : 0;
+      const jitter = range > 0 ? (Math.random() * 2 - 1) * range : 0;
+      const delta = base + jitter;
+      this.tempUpgrades.speedUpLevels = Math.max(0, (this.tempUpgrades.speedUpLevels || 0) + delta);
       achievementsEl.textContent = "Speed Up!";
-      this.triggerUpgradeEffect();
     } else if (id === 'extra_reroll') {
       this.tempUpgrades.rerollCharges += 1;
       achievementsEl.textContent = "Extra Re-roll!";
@@ -1212,7 +1465,17 @@ class Game {
       this.triggerUpgradeEffect();
     } else if (id === 'expanded_preview') {
       this.permUpgrades.expandedPreview = true;
-      achievementsEl.textContent = "Expanded Preview!";
+      achievementsEl.textContent = "+1 Next unlocked!";
+      this.triggerUpgradeEffect();
+    } else if (id === 'expanded_hold') {
+      const prevCapacity = this.holdCapacity || 1;
+      if (!this.permUpgrades.expandedHold) this.permUpgrades.expandedHold = true;
+      if (prevCapacity < 1 + this.maxExtraHolds) {
+        this.holdCapacity = prevCapacity + 1;
+        achievementsEl.textContent = "+1 Hold cell unlocked!";
+      } else {
+        achievementsEl.textContent = "Hold cells already at maximum.";
+      }
       this.triggerUpgradeEffect();
     } else if (id === 'piece_removal') {
       const candidates = [...this.currentPool];
@@ -1221,35 +1484,96 @@ class Game {
       return;
     } else if (id === 'obstacle_mode') {
       this.permUpgrades.obstacleMode = true;
-      achievementsEl.textContent = "Challenge Mode!";
-      showWarningBanner("Challenge: Rising obstacles will appear as you level up.");
-      this.triggerUpgradeEffect();
-    } else if (id === 'invulnerability') {
-      this.tempUpgrades.shieldCharges += 3;
-      achievementsEl.textContent = "Invulnerability!";
+      this.obstacleUpgradeLevel = (this.obstacleUpgradeLevel || 0) + 1;
+      this.obstacleScoreMultiplier = 2 + this.obstacleUpgradeLevel;
+      const baseInterval = 4;
+      this.obstaclePieceInterval = Math.max(1, baseInterval - this.obstacleUpgradeLevel);
+      achievementsEl.textContent = "Obstacle Focus!";
+      showWarningBanner("Obstacles are tougher and worth more points.");
       this.triggerUpgradeEffect();
     } else if (id === 'score_mult') {
       this.tempUpgrades.scoreMultiplier = 2;
       this.tempUpgrades.scoreMultiplierLines += 3;
       achievementsEl.textContent = "Score Multiplier!";
       this.triggerUpgradeEffect();
-    } else if (id === 'board_clear') {
-      const rowsToClear = 3;
-      for (let r = this.board.h - 1; r >= 0 && r > this.board.h - 1 - rowsToClear; r--) {
-        for (let c = 0; c < this.board.w; c++) {
-          this.board.grid[r][c] = 0;
-        }
-      }
-      achievementsEl.textContent = "Board Cleared!";
-      this.renderer.drawBoard();
+    } else if (id === 'clear_row') {
+      this.tempUpgrades.clearRowCharges += 1;
+      achievementsEl.textContent = "Clear Row charge gained!";
+      this.updateConsumableButtons();
       this.triggerUpgradeEffect();
+    } else if (id === 'clear_column') {
+      this.tempUpgrades.clearColumnCharges += 1;
+      achievementsEl.textContent = "Clear Column charge gained!";
+      this.updateConsumableButtons();
+      this.triggerUpgradeEffect();
+    } else if (id === 'clear_area') {
+      this.tempUpgrades.clearAreaCharges += 1;
+      achievementsEl.textContent = "Clear Area charge gained!";
+      this.updateConsumableButtons();
+      this.triggerUpgradeEffect();
+    } else if (id === 'expand_board') {
+      const base = BASE_W;
+      const maxExtra = MAX_EXTRA_BOARD_COLS;
+      const currentWidth = this.board ? this.board.w : W;
+      const currentExtra = currentWidth > base ? currentWidth - base : 0;
+      if (currentExtra >= maxExtra) {
+        achievementsEl.textContent = "Board width already at maximum.";
+      } else {
+        this.expandBoardWidth();
+        achievementsEl.textContent = "Board expanded!";
+        this.triggerUpgradeEffect();
+      }
+      this.updateUpgradeIndicators();
+      this.updateObjectivesDisplay();
+      this.closeUnlockModal();
+      this.state = "playing";
+      this.isPaused = false;
+      this.lastTime = performance.now();
+      requestAnimationFrame(this.loop);
+      return;
     }
     this.closeUnlockModal();
     this.updateUpgradeIndicators();
+    this.updateConsumableButtons();
     this.state = "playing";
     this.isPaused = false;
     this.lastTime = performance.now();
     requestAnimationFrame(this.loop);
+  }
+
+  expandBoardWidth() {
+    const base = BASE_W;
+    const maxExtra = MAX_EXTRA_BOARD_COLS;
+    const currentWidth = this.board ? this.board.w : W;
+    const currentExtra = currentWidth > base ? currentWidth - base : 0;
+    if (currentExtra >= maxExtra) return;
+    const newExtra = currentExtra + 1;
+    const newW = base + newExtra;
+    W = newW;
+    if (this.board) {
+      const delta = newW - this.board.w;
+      if (delta > 0) {
+        for (let r = 0; r < this.board.h; r++) {
+          const row = this.board.grid[r];
+          for (let i = 0; i < delta; i++) {
+            row.push(0);
+          }
+        }
+        this.board.w = newW;
+      }
+    }
+    if (boardEl) {
+      boardEl.innerHTML = "";
+      makeCells(boardEl, H, newW, "cell");
+    }
+    this.renderer = new Renderer(this.board);
+    this.updateBoardDimensions();
+    this.renderer.drawBoard();
+    if (this.active) {
+      this.renderer.drawGhost(this.active);
+      this.renderer.drawActive(this.active);
+    }
+    this.extraBoardColumns = newExtra;
   }
 
   startPieceRemovalSelection(candidates) {
@@ -1367,6 +1691,8 @@ class Game {
       pauseBtn.textContent = "Pause";
     }
     this.renderer.drawBoard();
+    this.updateConsumableButtons();
+    this.updateObjectivesDisplay();
   }
 
   closeUnlockModal() {
@@ -1410,23 +1736,84 @@ class Game {
       clearTimeout(this.pendingObstacleTimeout);
       this.pendingObstacleTimeout = null;
     }
-    showWarningBanner("Challenge: Rising obstacles in 3 seconds.");
+    showWarningBanner("Obstacle row incoming.");
     if (this.warningAudioEnabled) {
       playTone(440, 200, 0.08);
     }
     this.pendingObstacleTimeout = setTimeout(() => {
       clearWarningBanner();
       if (this.state === "playing") {
-        this.board.addObstacleRow();
+        this.spawnProceduralObstacleRow();
         this.renderer.drawBoard();
       }
       this.pendingObstacleTimeout = null;
-    }, 3000);
+    }, 600);
+  }
+
+  spawnProceduralObstacleRow() {
+    if (!this.board) return;
+    const w = this.board.w;
+    const pattern = Array(w).fill(0);
+    const mode = Math.floor(Math.random() * 3);
+    if (mode === 0) {
+      const span = Math.max(2, Math.min(4, w));
+      const start = Math.max(0, Math.floor(Math.random() * (w - span)));
+      for (let c = start; c < start + span; c++) pattern[c] = 1;
+    } else if (mode === 1) {
+      for (let c = 0; c < w; c++) {
+        if (c % 2 === 0) pattern[c] = 1;
+      }
+    } else {
+      for (let c = 0; c < w; c++) {
+        if (Math.random() < 0.5) pattern[c] = 1;
+      }
+    }
+    if (!pattern.some(v => v)) {
+      const idx = Math.floor(Math.random() * w);
+      pattern[idx] = 1;
+    }
+    if (typeof this.board.addObstacleRowPattern === 'function') {
+      this.board.addObstacleRowPattern(pattern);
+    } else {
+      this.board.addObstacleRow();
+    }
+    if (boardWrapEl) {
+      boardWrapEl.classList.add('obstacle-rise');
+      setTimeout(() => {
+        boardWrapEl.classList.remove('obstacle-rise');
+      }, 260);
+    }
   }
 
   lockPiece() {
     this.board.mergePiece(this.active);
     const scores = {1:100,2:300,3:500,4:800};
+    if (this.holdSlots && this.holdSlots.length > 1) {
+      const expiredIndices = [];
+      for (let i = 1; i < this.holdSlots.length; i++) {
+        const slot = this.holdSlots[i];
+        if (!slot) continue;
+        if (!Number.isFinite(slot.turnsLeft)) continue;
+        slot.turnsLeft -= 1;
+        if (slot.turnsLeft <= 0) expiredIndices.push(i);
+      }
+      if (expiredIndices.length) {
+        const returnedTypes = [];
+        expiredIndices.sort((a, b) => b - a).forEach(idx => {
+          const slot = this.holdSlots[idx];
+          if (slot && slot.type) returnedTypes.push(slot.type);
+          this.holdSlots.splice(idx, 1);
+        });
+        if (!this.queue) this.queue = [];
+        returnedTypes.forEach(type => {
+          this.queue.unshift(type);
+        });
+        if (returnedTypes.length && typeof this.showTemporaryMessage === "function") {
+          this.showTemporaryMessage("Held piece returned to queue");
+        }
+        this.updateHoldDisplay();
+      }
+    }
     let cleared = this.board.clearLines();
     if (cleared.length === 0) {
       this.combo = -1;
@@ -1452,8 +1839,15 @@ class Game {
       this.spawnParticles(cleared);
       if (cleared.length > 1) this.showCombo(cleared.length);
       const hadObstacles = Array.isArray(this.board.lastClearedHadObstacles) && this.board.lastClearedHadObstacles.some(Boolean);
+      const obstacleLines = Array.isArray(this.board.lastClearedHadObstacles)
+        ? this.board.lastClearedHadObstacles.filter(Boolean).length
+        : 0;
       const baseAdd = (scores[cleared.length] || 0) * this.level;
-      const add = hadObstacles ? baseAdd * 2 : baseAdd;
+      let lineMultiplier = 1;
+      if (hadObstacles) {
+        lineMultiplier = this.obstacleScoreMultiplier || 2;
+      }
+      const add = baseAdd * lineMultiplier;
       this.combo++;
       let comboBonus = 0;
       if (this.combo > 0) {
@@ -1471,26 +1865,22 @@ class Game {
       }
       this.score += total;
       this.lines += cleared.length;
-      this.linesSinceUnlock += cleared.length;
-      const newLevel = 1 + Math.floor(this.lines / 10);
-      if (newLevel > this.level) {
-        this.level = newLevel;
-        tweenNumber(levelEl, this.level);
-        achievementsEl.textContent = "Level Up!";
-        if (this.tempUpgrades.speedUpLevels > 0) {
-          this.tempUpgrades.speedUpLevels--;
+      if (this.objectives) {
+        const obj = this.objectives;
+        obj.progressLines = obj.progressLines + cleared.length > obj.targetLines ? obj.targetLines : obj.progressLines + cleared.length;
+        obj.progressScore = obj.progressScore + total > obj.targetScore ? obj.targetScore : obj.progressScore + total;
+        if (obstacleLines > 0 && obj.targetObstacles > 0) {
+          const nextOb = obj.progressObstacles + obstacleLines;
+          obj.progressObstacles = nextOb > obj.targetObstacles ? obj.targetObstacles : nextOb;
         }
-        if (this.permUpgrades.obstacleMode) {
-          this.scheduleObstacleRow();
-        }
-        this.updateUpgradeIndicators();
+        this.updateObjectivesDisplay();
       }
       tweenNumber(scoreEl, this.score);
       tweenNumber(linesEl, this.lines);
       playTone(550, 50, 0.08);
       playTone(660, 50, 0.08);
-      if (this.linesSinceUnlock >= this.unlockThreshold) {
-        this.unlock();
+      if (this.checkObjectivesComplete()) {
+        this.handleLevelUp();
         break;
       }
       cleared = this.board.clearLines();
@@ -1552,94 +1942,48 @@ class Game {
       this.showGameOverScreen();
       return;
     }
+    if (this.permUpgrades && this.permUpgrades.obstacleMode) {
+      this.piecesSinceObstacle = (this.piecesSinceObstacle || 0) + 1;
+      const interval = this.obstaclePieceInterval || 4;
+      if (this.piecesSinceObstacle >= interval) {
+        this.piecesSinceObstacle = 0;
+        this.scheduleObstacleRow();
+      }
+    }
     this.active = null;
     this.spawn();
     this.renderer.drawBoard();
   }
-  update(dt) {
-    if (this.state !== "playing") return;
-    if (this.isPaused) return;
-    const speed = this.softDropping ? SOFT_DROP_MS : this.ticksForLevel();
-    this.dropTimer += dt;
-    if (!this.active) {
-      this.renderer.drawBoard();
-      return;
-    }
-    const touching = !this.valid(this.active, 0, 1);
-    if (touching) {
-      this.lockTimer += dt;
-      if (this.lockTimer >= LOCK_DELAY_MS) {
-        this.lockTimer = 0;
-        this.lockPiece();
-        return;
-      }
-    }
-    while (this.dropTimer >= speed) {
-      this.dropTimer -= speed;
-      if (!this.move(0,1)) {
-        break;
-      }
-    }
-    this.renderer.drawBoard();
-    if (this.active) {
-      this.renderer.drawGhost(this.active);
-      this.renderer.drawActive(this.active);
-    }
-  }
-  loop(t) {
-    if (this.state !== "playing") return;
-    if (this.isPaused) return;
-    const dt = t - this.lastTime;
-    this.lastTime = t;
-    this.update(dt);
-    requestAnimationFrame(this.loop);
-  }
-
   hold() {
     if (!this.active || this.state !== "playing") return;
-    
+
     const now = Date.now();
     if (now - this.lastHoldTime < this.holdCooldownTime) return;
-    
-    if (!this.heldPiece) {
-      const pieceData = { type: this.active.type, timestamp: now };
-      try {
-        localStorage.setItem(this.holdStorageKey, JSON.stringify(pieceData));
-      } catch (e) {
-        console.warn('Failed to persist held piece:', e);
+
+    const maxSlots = this.holdCapacity || 1;
+    if (!this.holdSlots) this.holdSlots = [];
+    if (this.holdSlots.length >= maxSlots) {
+      if (typeof this.showTemporaryMessage === "function") {
+        this.showTemporaryMessage("Hold slots full");
       }
-      this.heldPiece = pieceData;
-      this.lastHoldTime = now;
-      this.updateHoldDisplay();
-      this.active = null;
-      this.spawn();
-      this.renderer.drawBoard();
       return;
     }
 
-    const oldActiveType = this.active.type;
-    const newPiece = new Piece(this.heldPiece.type);
-    if (!this.valid(newPiece, 0, 0, newPiece.rot)) {
-      newPiece.x = Math.floor(W / 2);
-      newPiece.y = -2;
-      newPiece.rot = 0;
-      if (!this.valid(newPiece, 0, 0, newPiece.rot)) {
-        return;
-      }
-    }
-    this.active = newPiece;
-    const pieceData = { type: oldActiveType, timestamp: now };
-    try {
-      localStorage.setItem(this.holdStorageKey, JSON.stringify(pieceData));
-    } catch (e) {
-      console.warn('Failed to persist held piece:', e);
-    }
-    this.heldPiece = pieceData;
+    const index = this.holdSlots.length;
+    const baseTurns = index === 0
+      ? Infinity
+      : (this.extraHoldConfig[index - 1] || this.extraHoldConfig[this.extraHoldConfig.length - 1] || 3);
+
+    this.holdSlots.push({
+      type: this.active.type,
+      turnsLeft: baseTurns
+    });
+
     this.lastHoldTime = now;
     this.updateHoldDisplay();
+    this.active = null;
+    this.spawn();
     this.renderer.drawBoard();
-    this.renderer.drawGhost(this.active);
-    this.renderer.drawActive(this.active);
   }
 
   release() {
@@ -1648,34 +1992,10 @@ class Game {
     const now = Date.now();
     if (now - this.lastHoldTime < this.holdCooldownTime) return;
 
-    if (!this.heldPiece) {
-      try {
-        const stored = localStorage.getItem(this.holdStorageKey);
-        if (stored) {
-          const pieceData = JSON.parse(stored);
-          const age = now - pieceData.timestamp;
-          if (age < this.holdExpirationTime) {
-            this.heldPiece = pieceData;
-          } else {
-            localStorage.removeItem(this.holdStorageKey);
-          }
-        }
-      } catch (e) {
-        console.warn('Failed to load piece from hold:', e);
-      }
-    }
+    if (!this.holdSlots || !this.holdSlots.length) return;
 
-    if (!this.heldPiece) return;
-
-    const age = now - this.heldPiece.timestamp;
-    if (age >= this.holdExpirationTime) {
-      this.heldPiece = null;
-      localStorage.removeItem(this.holdStorageKey);
-      this.updateHoldDisplay();
-      return;
-    }
-
-    const newPiece = new Piece(this.heldPiece.type);
+    const primary = this.holdSlots[0];
+    const newPiece = new Piece(primary.type);
     if (!this.valid(newPiece, 0, 0, newPiece.rot)) {
       newPiece.x = Math.floor(W / 2);
       newPiece.y = -2;
@@ -1686,25 +2006,14 @@ class Game {
     }
 
     if (this.active) {
-      this.heldPiece = {
-        type: this.active.type,
-        timestamp: now
-      };
-      try {
-        localStorage.setItem(this.holdStorageKey, JSON.stringify(this.heldPiece));
-      } catch (e) {
-        console.warn('Failed to store piece in hold:', e);
-      }
+      const prevType = this.active.type;
+      this.active = newPiece;
+      primary.type = prevType;
     } else {
-      this.heldPiece = null;
-      try {
-        localStorage.removeItem(this.holdStorageKey);
-      } catch (e) {
-        console.warn('Failed to clear hold storage:', e);
-      }
+      this.active = newPiece;
+      this.holdSlots.shift();
     }
 
-    this.active = newPiece;
     this.lastHoldTime = now;
 
     this.updateHoldDisplay();
@@ -1714,7 +2023,85 @@ class Game {
   }
 
   updateHoldDisplay() {
-    this.renderer.drawHold(this.heldPiece);
+    const hasSlots = Array.isArray(this.holdSlots) && this.holdSlots.length > 0;
+    const primary = hasSlots ? this.holdSlots[0] : null;
+    let helperType = null;
+    if (this.holdCapacity && this.holdCapacity > 1 && this.holdSlots && this.holdSlots.length > 1) {
+      const timed = this.holdSlots[1];
+      if (timed && timed.type) helperType = timed.type;
+    }
+    this.renderer.drawHold(primary, helperType);
+  }
+
+  useClearRow() {
+    if (!this.board || !this.tempUpgrades || this.tempUpgrades.clearRowCharges <= 0) return;
+    const rows = [];
+    for (let r = 0; r < this.board.h; r++) {
+      if (this.board.grid[r].some(v => v)) rows.push(r);
+    }
+    if (!rows.length) return;
+    const idx = rows[Math.floor(Math.random() * rows.length)];
+    for (let c = 0; c < this.board.w; c++) {
+      this.board.grid[idx][c] = 0;
+    }
+    this.tempUpgrades.clearRowCharges--;
+    this.updateConsumableButtons();
+    this.updateUpgradeIndicators();
+    this.spawnParticles([idx]);
+    this.renderer.drawBoard();
+    this.showTemporaryMessage("Row cleared");
+  }
+
+  useClearColumn() {
+    if (!this.board || !this.tempUpgrades || this.tempUpgrades.clearColumnCharges <= 0) return;
+    const cols = [];
+    for (let c = 0; c < this.board.w; c++) {
+      for (let r = 0; r < this.board.h; r++) {
+        if (this.board.grid[r][c]) {
+          cols.push(c);
+          break;
+        }
+      }
+    }
+    if (!cols.length) return;
+    const idx = cols[Math.floor(Math.random() * cols.length)];
+    for (let r = 0; r < this.board.h; r++) {
+      this.board.grid[r][idx] = 0;
+    }
+    this.tempUpgrades.clearColumnCharges--;
+    this.updateConsumableButtons();
+    this.updateUpgradeIndicators();
+    this.renderer.drawBoard();
+    this.showTemporaryMessage("Column cleared");
+  }
+
+  useClearArea() {
+    if (!this.board || !this.tempUpgrades || this.tempUpgrades.clearAreaCharges <= 0) return;
+    const occupied = [];
+    for (let r = 0; r < this.board.h; r++) {
+      for (let c = 0; c < this.board.w; c++) {
+        if (this.board.grid[r][c]) occupied.push({ r, c });
+      }
+    }
+    if (!occupied.length) return;
+    const center = occupied[Math.floor(Math.random() * occupied.length)];
+    const rows = new Set();
+    for (let dr = -1; dr <= 1; dr++) {
+      for (let dc = -1; dc <= 1; dc++) {
+        const r = center.r + dr;
+        const c = center.c + dc;
+        if (r >= 0 && r < this.board.h && c >= 0 && c < this.board.w) {
+          this.board.grid[r][c] = 0;
+          rows.add(r);
+        }
+      }
+    }
+    this.tempUpgrades.clearAreaCharges--;
+    this.updateConsumableButtons();
+    this.updateUpgradeIndicators();
+    this.spawnParticles(Array.from(rows));
+    this.renderer.drawBoard();
+    this.showTemporaryMessage("Area cleared");
   }
 
   showTemporaryMessage(message, duration = 2000) {

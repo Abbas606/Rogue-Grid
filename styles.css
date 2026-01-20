@@ -34,6 +34,30 @@ body {
   padding: 24px;
 }
 
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.top-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.top-controls .control-btn {
+  width: auto;
+}
+
+#consumable-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: stretch;
+}
+
 #game {
   /* Grid System Specification:
      - 3-column layout: Controls (Left), Board (Center), Stats (Right)
@@ -79,6 +103,10 @@ aside {
 
 #sidebar {
   grid-area: stats;
+}
+
+#objectives {
+  margin-top: 8px;
 }
 
 #board-wrap {
@@ -308,6 +336,10 @@ select {
   opacity: 0;
   transform: translateY(4px);
   transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.consumable-controls-disabled {
+  opacity: 0.5;
+  pointer-events: none;
 }
 .metric {
   display: flex;

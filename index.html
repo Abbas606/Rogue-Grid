@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>RogueTris</title>
+  <title>Rogue Grid</title>
   <link rel="preload" href="styles.css" as="style">
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -11,10 +11,21 @@
   <main id="app">
     <div id="scale-root">
       <header class="topbar">
-        <h1 aria-label="Game title">RogueTris</h1>
+        <h1 aria-label="Game title">Rogue Grid</h1>
         <div class="top-controls">
           <button id="start-btn" type="button" aria-label="Start game" class="control-btn">Start</button>
           <button id="pause-btn" type="button" aria-pressed="false" aria-label="Pause or play" class="control-btn">Pause</button>
+          <div id="consumable-controls" aria-label="Consumable clears">
+            <button id="clear-row-btn" class="control-btn small-btn" type="button">
+              Clear Row (<span id="clear-row-count">0</span>)
+            </button>
+            <button id="clear-column-btn" class="control-btn small-btn" type="button">
+              Clear Column (<span id="clear-column-count">0</span>)
+            </button>
+            <button id="clear-area-btn" class="control-btn small-btn" type="button">
+              Clear Area (<span id="clear-area-count">0</span>)
+            </button>
+          </div>
         </div>
       </header>
       <section id="game" aria-label="Tetris game area">
@@ -47,7 +58,7 @@
           <div class="controls-card">
             <div class="controls-title">Piece Pool</div>
             <div id="pool-display" class="pool-grid"></div>
-            <button id="reset-pool-btn" class="control-btn small-btn" title="Reset to standard 7 pieces">Reset Pool</button>
+            <button id="reset-pool-btn" class="control-btn small-btn" title="Reset pool and redraw random pieces">Reset Pool</button>
           </div>
         </aside>
         <div id="board-wrap">
@@ -125,6 +136,24 @@
             </div>
             <div id="achievements" aria-live="polite" aria-atomic="true"></div>
           </div>
+          <div id="objectives" aria-live="polite" aria-atomic="true">
+            <div class="metric">
+              <div class="label">Objectives</div>
+              <div></div>
+            </div>
+            <div class="metric">
+              <div class="label">Lines</div>
+              <div id="obj-lines">0 / 0</div>
+            </div>
+            <div class="metric">
+              <div class="label">Obstacles</div>
+              <div id="obj-obstacles">0 / 0</div>
+            </div>
+            <div class="metric">
+              <div class="label">Score</div>
+              <div id="obj-score">0 / 0</div>
+            </div>
+          </div>
           <div id="warning-banner" aria-live="polite" aria-atomic="true"></div>
         </aside>
       </section>
@@ -171,7 +200,7 @@
       <div id="confirm-overlay" aria-hidden="true" class="overlay-base">
         <div class="overlay-inner">
           <div class="overlay-title" style="font-size: 1.5rem; color: #ef4444; background: none; -webkit-text-fill-color: initial;">Reset Pool?</div>
-          <div class="unlock-subtitle" style="margin-bottom: 24px;">This will wipe your progress and revert to the standard 7 pieces. This cannot be undone.</div>
+          <div class="unlock-subtitle" style="margin-bottom: 24px;">This will wipe your progress and give you 10 completely random pieces. This cannot be undone.</div>
           <div class="confirm-actions" style="display: flex; gap: 12px; justify-content: center;">
             <button id="confirm-reset-btn" class="control-btn" style="background: #ef4444; color: white; width: auto; padding: 12px 24px;">Reset</button>
             <button id="cancel-reset-btn" class="control-btn" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); width: auto; padding: 12px 24px;">Cancel</button>

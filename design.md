@@ -47,9 +47,7 @@
   - `speed_up`: boosts `speedUpLevels`.
   - `extra_reroll`: increments `rerollCharges`.
   - `second_chance`: enables a one-time top-row clear on game over.
-  - `invulnerability`: grants multiple `shieldCharges` that clear the top few rows on game over.
   - `score_mult`: sets `scoreMultiplier` to 2 for several cleared lines.
-  - `board_clear`: clears several bottom rows immediately.
 
 ### Permanent Upgrades
 
@@ -73,4 +71,3 @@
 - Upgrade selection analytics are stored in `localStorage` under the key `rogueTris_upgradeStats`.
 - `Game.recordUpgradeSelection(id)` increments a counter for the chosen upgrade id.
 - Data can be inspected via the browser console for balancing and analysis.
-
