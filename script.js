@@ -107,6 +107,8 @@ makeCells(boardEl, H, W, "cell");
 makeCells(previewEl, 6, 6, "preview-cell");
 const previewEl2 = byId("preview2");
 if (previewEl2) makeCells(previewEl2, 6, 6, "preview-cell");
+const previewEl3 = byId("preview3");
+if (previewEl3) makeCells(previewEl3, 6, 6, "preview-cell");
 const holdEl2 = byId("hold2");
 if (holdEl2) makeCells(holdEl2, 6, 6, "preview-cell");
 const holdEl3 = byId("hold3");
@@ -199,8 +201,8 @@ const UPGRADE_DEFS = [
   { id: 'clear_row', name: 'Clear Row', type: 'temp', weight: 1, icon: '➖', desc: 'Gain a consumable that clears a random row' },
   { id: 'clear_column', name: 'Clear Column', type: 'temp', weight: 1, icon: '➕', desc: 'Gain a consumable that clears a random column' },
   { id: 'clear_area', name: 'Clear Area', type: 'temp', weight: 1, icon: '⛰', desc: 'Gain a consumable that clears a 3x3 area' },
-  { id: 'expanded_preview', name: '+1 Next', type: 'perm', weight: 2, icon: '🔭', desc: 'Show +1 next piece' },
-  { id: 'expanded_hold', name: '+1 Hold', type: 'perm', weight: 2, icon: '📥', desc: 'Add an extra timed hold cell' },
+  { id: 'expanded_preview', name: '+1 Next', type: 'perm', weight: 2, icon: '🔭', desc: 'Show +1 next piece (stackable)' },
+  { id: 'expanded_hold', name: '+1 Hold', type: 'perm', weight: 2, icon: '📥', desc: 'Add an extra timed hold cell (stackable)' },
   { id: 'expand_board', name: '+1 Board', type: 'perm', weight: 1, icon: '⬌', desc: 'Add one column to the board (max +5)' },
   { id: 'piece_removal', name: 'Remove Piece', type: 'perm', weight: 2, icon: '🗑️', desc: 'Remove a piece type' },
   { id: 'obstacle_mode', name: 'Obstacle Focus', type: 'perm', weight: 1, icon: '🧱', desc: 'Stronger obstacles that give more points' },
@@ -252,78 +254,53 @@ class Board {
   clearLines() {
     const cleared = [];
     const clearedHadObstacles = [];
-    let rowsToClear = [];
-
-    // First pass: Identify rows to clear and handle obstacle downgrades
     for (let r = this.h - 1; r >= 0; r--) {
       if (this.grid[r].every(v => v)) {
-        let maxObstacleLevel = 0;
+        const hadOb = this.grid[r].some(v => this.isObstacleCell(v));
+        cleared.push(r);
+        clearedHadObstacles.push(hadOb);
         for (let c = 0; c < this.w; c++) {
-          const v = this.grid[r][c];
-          if (this.isObstacleCell(v)) {
-            const n = parseInt(String(v).slice(2), 10);
-            if (Number.isFinite(n) && n > maxObstacleLevel) maxObstacleLevel = n;
-          }
-        }
-        
-        if (maxObstacleLevel > 1) {
-          // Downgrade obstacles
-          for (let c = 0; c < this.w; c++) {
-            const v = this.grid[r][c];
-            if (this.isObstacleCell(v)) {
-              const n = parseInt(String(v).slice(2), 10);
-              if (Number.isFinite(n) && n > 1) {
-                this.grid[r][c] = 'OB' + (n - 1);
-              } else {
-                this.grid[r][c] = 0;
-              }
-            } else {
-              this.grid[r][c] = 0;
-            }
-          }
-        } else {
-          // Mark for clearing
-          const hadOb = this.grid[r].some(v => this.isObstacleCell(v));
-          cleared.push(r);
-          clearedHadObstacles.push(hadOb);
-          rowsToClear.push(r);
+          this.grid[r][c] = 0;
         }
       }
     }
-
-    // Clear the identified rows (without splicing)
-    for (const r of rowsToClear) {
-      for (let c = 0; c < this.w; c++) {
-        this.grid[r][c] = 0;
-      }
-    }
-
-    // Apply cascading gravity if any rows were cleared
-    if (rowsToClear.length > 0) {
+    if (cleared.length > 0) {
       this.applyGravity();
     }
-
     this.lastClearedHadObstacles = clearedHadObstacles;
     return cleared;
   }
-
   applyGravity() {
     for (let c = 0; c < this.w; c++) {
-      let writeRow = this.h - 1;
-      for (let r = this.h - 1; r >= 0; r--) {
-        const cell = this.grid[r][c];
-        if (this.isObstacleCell(cell)) {
-          // Obstacles act as floors, reset writeRow to above the obstacle
-          writeRow = r - 1;
-        } else if (cell !== 0) {
-          // Move piece block to writeRow
-          if (writeRow !== r) {
-            this.grid[writeRow][c] = cell;
-            this.grid[r][c] = 0;
-          }
-          writeRow--;
+      // Process each column independently
+      // We will iterate from bottom to top
+      // writePtr tracks where the next falling block should land
+      let writePtr = this.h - 1;
+      
+      for (let readPtr = this.h - 1; readPtr >= 0; readPtr--) {
+        const val = this.grid[readPtr][c];
+        
+        // If it's an obstacle, it's static/fixed in place.
+        // It acts as a floor for any blocks above it.
+        // So, we must reset the writePtr to be immediately above this obstacle.
+        if (this.isObstacleCell(val)) {
+          // If the obstacle is at readPtr, but writePtr was lower (meaning there were gaps below),
+          // we can't move the obstacle down. It stays at readPtr.
+          // Any subsequent blocks must stack on top of this obstacle.
+          writePtr = readPtr - 1; 
+          continue;
         }
-        // If empty, do nothing (writeRow stays waiting)
+
+        // If it's a regular piece block (non-zero, non-obstacle)
+        if (val !== 0) {
+          // If we have a gap to fill (writePtr > readPtr)
+          if (writePtr > readPtr) {
+            this.grid[writePtr][c] = val;
+            this.grid[readPtr][c] = 0;
+          }
+          // Move the write pointer up one slot
+          writePtr--;
+        }
       }
     }
   }
@@ -521,61 +498,44 @@ class Renderer {
     if (previewWrap) { previewWrap.classList.add("active"); setTimeout(()=>previewWrap.classList.remove("active"), 220); }
   }
 
-  drawHold(heldPiece, helperType) {
-    const cells = Array.from(holdEl.children);
-    for (const c of cells) {
-      c.style.backgroundColor = '';
-    }
-    if (!heldPiece) {
-      holdEl.style.opacity = "0";
-      holdEl.getBoundingClientRect();
-      holdEl.style.transition = "opacity 200ms ease";
-      holdEl.style.opacity = "1";
-    } else {
-      const piece = new Piece(heldPiece.type);
-      const shape = piece.shape();
-      const color = PIECES[heldPiece.type].color;
-      const w = shape[0].length;
-      const h = shape.length;
-      const startX = Math.floor((6 - w) / 2);
-      const startY = Math.floor((6 - h) / 2);
-      for (let r = 0; r < h; r++) {
-        for (let c = 0; c < w; c++) {
-          if (shape[r][c]) {
-            const idx = (startY + r) * 6 + (startX + c);
-            cells[idx].style.backgroundColor = color;
-          }
-        }
-      }
-      holdEl.style.opacity = "0";
-      holdEl.getBoundingClientRect();
-      holdEl.style.transition = "opacity 200ms ease";
-      holdEl.style.opacity = "1";
-    }
-    if (holdEl2) {
-      const cells2 = Array.from(holdEl2.children);
-      for (const c of cells2) c.style.backgroundColor = '';
-      if (helperType) {
-        const piece2 = new Piece(helperType);
-        const shape2 = piece2.shape();
-        const color2 = PIECES[helperType].color;
-        const w2 = shape2[0].length;
-        const h2 = shape2.length;
-        const startX2 = Math.floor((6 - w2) / 2);
-        const startY2 = Math.floor((6 - h2) / 2);
-        for (let r = 0; r < h2; r++) {
-          for (let c = 0; c < w2; c++) {
-            if (shape2[r][c]) {
-              const idx2 = (startY2 + r) * 6 + (startX2 + c);
-              cells2[idx2].style.backgroundColor = color2;
+  drawHold(holdSlots) {
+    const slots = [holdEl, holdEl2, holdEl3];
+    const data = (holdSlots || []).map(s => (s && s.type) ? s.type : (s && typeof s === 'string' ? s : null));
+
+    slots.forEach((el, i) => {
+      if (!el) return;
+      const type = data[i];
+      const cells = Array.from(el.children);
+      for (const c of cells) c.style.backgroundColor = '';
+
+      if (type) {
+        const piece = new Piece(type);
+        const shape = piece.shape();
+        const color = PIECES[type].color;
+        const w = shape[0].length;
+        const h = shape.length;
+        const startX = Math.floor((6 - w) / 2);
+        const startY = Math.floor((6 - h) / 2);
+        for (let r = 0; r < h; r++) {
+          for (let c = 0; c < w; c++) {
+            if (shape[r][c]) {
+              const idx = (startY + r) * 6 + (startX + c);
+              if (cells[idx]) cells[idx].style.backgroundColor = color;
             }
           }
         }
-        holdEl2.style.display = "grid";
+        el.style.display = "grid";
+        el.style.opacity = "1";
       } else {
-        holdEl2.style.display = "none";
+        // Hide extra slots if empty, but keep primary visible (as empty grid)
+        if (i === 0) {
+          el.style.opacity = "1";
+          el.style.display = "grid";
+        } else {
+          el.style.display = "none";
+        }
       }
-    }
+    });
   }
 }
 
@@ -643,8 +603,8 @@ class Game {
     };
     this.secondChanceAvailable = false;
     this.permUpgrades = {
-      expandedPreview: false,
-      expandedHold: false,
+      expandedPreview: 0,
+      expandedHold: 0,
       obstacleMode: true,
     };
     this.removedPieces = [];
@@ -667,6 +627,8 @@ class Game {
     this.obstacleScoreMultiplier = 2;
     this.obstaclePieceInterval = 4;
     this.obstacleUpgradeLevel = 0;
+    
+    this.animationFrameId = null;
 
     this.loop = this.loop.bind(this);
     this.bindInput();
@@ -823,38 +785,52 @@ class Game {
   resetObjectivesForLevel() {
     const level = this.level || 1;
     
-    // Determine number of active objectives based on difficulty curve
-    // Level 1-3: 1 objective
-    // Level 4-6: 2 objectives
-    // Level 7+: 3 objectives
-    let activeCount = 1;
-    if (level >= 7) activeCount = 3;
-    else if (level >= 4) activeCount = 2;
-
-    // Define potential objectives
-    const types = ['lines', 'score'];
-    if (this.permUpgrades && this.permUpgrades.obstacleMode) {
-      types.push('obstacles');
-    }
-
-    // Randomly select objectives
-    const shuffled = [...types].sort(() => 0.5 - Math.random());
-    const selected = shuffled.slice(0, activeCount);
-
-    const linesTarget = selected.includes('lines') ? 6 + (level - 1) * 2 : 0;
-    const scoreTarget = selected.includes('score') ? 800 * level : 0;
+    // Difficulty Curve for Objectives
+    // Levels 1-10: 1 Objective
+    // Levels 11-25: 2 Objectives
+    // Levels 26+: 3 Objectives
     
+    const possibleObjectives = ['lines', 'score', 'obstacles'];
+    let numObjectives = 1;
+    
+    if (level >= 26) {
+      numObjectives = 3;
+    } else if (level >= 11) {
+      numObjectives = 2;
+    }
+    
+    // Pick random objectives
+    const selectedTypes = [];
+    const pool = [...possibleObjectives];
+    // If obstacle mode is disabled, remove 'obstacles' from pool
+    if (!this.permUpgrades || !this.permUpgrades.obstacleMode) {
+      const idx = pool.indexOf('obstacles');
+      if (idx !== -1) pool.splice(idx, 1);
+    }
+    
+    for (let i = 0; i < numObjectives; i++) {
+      if (pool.length === 0) break;
+      const r = Math.floor(Math.random() * pool.length);
+      selectedTypes.push(pool[r]);
+      pool.splice(r, 1);
+    }
+    
+    // Define targets
+    const linesTarget = 6 + (level - 1) * 2;
+    const scoreTarget = 800 * level;
     let obstaclesTarget = 0;
-    if (selected.includes('obstacles')) {
+    if (this.permUpgrades && this.permUpgrades.obstacleMode) {
       const raw = 4 + level;
       obstaclesTarget = raw > 12 ? 12 : raw;
     }
     
+    // Initialize objectives object.
+    // If a type is NOT selected, set its target to 0 (disabled).
     this.objectives = {
       level,
-      targetLines: linesTarget,
-      targetScore: scoreTarget,
-      targetObstacles: obstaclesTarget,
+      targetLines: selectedTypes.includes('lines') ? linesTarget : 0,
+      targetScore: selectedTypes.includes('score') ? scoreTarget : 0,
+      targetObstacles: selectedTypes.includes('obstacles') ? obstaclesTarget : 0,
       progressLines: 0,
       progressScore: 0,
       progressObstacles: 0
@@ -876,16 +852,27 @@ class Game {
     if (infoEl) infoEl.style.display = "none";
     const obj = this.objectives;
     if (objLinesEl) {
-      objLinesEl.textContent = obj.progressLines + " / " + obj.targetLines;
+      if (obj.targetLines > 0) {
+        objLinesEl.parentElement.style.display = "";
+        objLinesEl.textContent = obj.progressLines + " / " + obj.targetLines;
+      } else {
+        objLinesEl.parentElement.style.display = "none";
+      }
     }
     if (objScoreEl) {
-      objScoreEl.textContent = obj.progressScore + " / " + obj.targetScore;
+      if (obj.targetScore > 0) {
+        objScoreEl.parentElement.style.display = "";
+        objScoreEl.textContent = obj.progressScore + " / " + obj.targetScore;
+      } else {
+        objScoreEl.parentElement.style.display = "none";
+      }
     }
     if (objObstaclesEl) {
       if (obj.targetObstacles > 0) {
+        objObstaclesEl.parentElement.style.display = "";
         objObstaclesEl.textContent = obj.progressObstacles + " / " + obj.targetObstacles;
       } else {
-        objObstaclesEl.textContent = "0 / 0";
+        objObstaclesEl.parentElement.style.display = "none";
       }
     }
   }
@@ -922,16 +909,34 @@ class Game {
     clearColBtn.disabled = !(colCount > 0 && canUse);
     clearAreaBtn.disabled = !(areaCount > 0 && canUse);
   }
+
+  startLoop() {
+    if (this.animationFrameId) {
+      cancelAnimationFrame(this.animationFrameId);
+    }
+    this.lastTime = performance.now();
+    this.animationFrameId = requestAnimationFrame(this.loop);
+  }
+
+  stopLoop() {
+    if (this.animationFrameId) {
+      cancelAnimationFrame(this.animationFrameId);
+      this.animationFrameId = null;
+    }
+  }
+
   start() {
     this.reset();
     this.state = "playing";
     this.isPaused = false;
     if (pauseBtn) { pauseBtn.disabled = false; pauseBtn.setAttribute("aria-pressed","false"); pauseBtn.textContent = "Pause"; }
-    this.lastTime = performance.now();
-    requestAnimationFrame(this.loop);
+    this.startLoop();
   }
   loop(time) {
-    if (this.state === "paused" || this.state === "gameover") return;
+    if (this.state === "paused" || this.state === "gameover" || this.state === "unlocking") {
+      this.animationFrameId = null;
+      return;
+    }
     const dt = time - this.lastTime;
     this.lastTime = time;
     this.update(dt);
@@ -944,7 +949,7 @@ class Game {
       this.renderer.drawGhost(this.active);
       this.renderer.drawActive(this.active);
     }
-    requestAnimationFrame(this.loop);
+    this.animationFrameId = requestAnimationFrame(this.loop);
   }
 
   validateAndClearTemporaryElements() {
@@ -994,33 +999,23 @@ class Game {
       return;
     }
     if (this.queue.length === 0) this.queue = bagRandom(this.currentPool);
+    
+    // Draw Primary Preview
     this.renderer.drawPreview(this.queue[0] || null);
+    
     const p2 = byId('preview2');
+    const p3 = byId('preview3');
+    const expandedLevel = this.permUpgrades.expandedPreview || 0;
+    
     if (p2) {
-      p2.style.display = this.permUpgrades.expandedPreview ? 'grid' : 'none';
-      if (this.permUpgrades.expandedPreview) {
-        const cells = Array.from(p2.children);
-        for (const c of cells) c.style.backgroundColor = '';
-        const next2 = this.queue[1] || null;
-        if (next2) {
-          const piece = new Piece(next2);
-          const shape = piece.shape();
-          const color = PIECES[next2].color;
-          const w = shape[0].length;
-          const h = shape.length;
-          const startX = Math.floor((6 - w) / 2);
-          const startY = Math.floor((6 - h) / 2);
-          for (let r = 0; r < h; r++) {
-            for (let c = 0; c < w; c++) {
-              if (shape[r][c]) {
-                const idx = (startY + r) * 6 + (startX + c);
-                cells[idx].style.backgroundColor = color;
-              }
-            }
-          }
-        }
-      }
+      if (expandedLevel >= 1) this.drawPieceToElement(p2, this.queue[1]);
+      else p2.style.display = 'none';
     }
+    if (p3) {
+      if (expandedLevel >= 2) this.drawPieceToElement(p3, this.queue[2]);
+      else p3.style.display = 'none';
+    }
+    
     this.updateHoldDisplay();
   }
   reset() {
@@ -1199,8 +1194,7 @@ class Game {
         this.isPaused = false;
         pauseBtn.setAttribute("aria-pressed","false");
         pauseBtn.textContent = "Pause";
-        this.lastTime = performance.now();
-        requestAnimationFrame(this.loop);
+        this.startLoop();
         this.updateConsumableButtons();
       }
     });
@@ -1455,8 +1449,7 @@ class Game {
 
     this.state = "playing";
     this.isPaused = false;
-    this.lastTime = performance.now();
-    requestAnimationFrame(this.loop);
+    this.startLoop();
   }
   recordUpgradeSelection(id) {
     try {
@@ -1523,18 +1516,13 @@ class Game {
       achievementsEl.textContent = "Second Chance ready!";
       this.triggerUpgradeEffect();
     } else if (id === 'expanded_preview') {
-      this.permUpgrades.expandedPreview = true;
+      this.permUpgrades.expandedPreview = (this.permUpgrades.expandedPreview || 0) + 1;
       achievementsEl.textContent = "+1 Next unlocked!";
       this.triggerUpgradeEffect();
     } else if (id === 'expanded_hold') {
-      const prevCapacity = this.holdCapacity || 1;
-      if (!this.permUpgrades.expandedHold) this.permUpgrades.expandedHold = true;
-      if (prevCapacity < 1 + this.maxExtraHolds) {
-        this.holdCapacity = prevCapacity + 1;
-        achievementsEl.textContent = "+1 Hold cell unlocked!";
-      } else {
-        achievementsEl.textContent = "Hold cells already at maximum.";
-      }
+      this.permUpgrades.expandedHold = (this.permUpgrades.expandedHold || 0) + 1;
+      this.holdCapacity = 1 + this.permUpgrades.expandedHold;
+      achievementsEl.textContent = "+1 Hold cell unlocked!";
       this.triggerUpgradeEffect();
     } else if (id === 'piece_removal') {
       const candidates = [...this.currentPool];
@@ -1587,8 +1575,7 @@ class Game {
       this.closeUnlockModal();
       this.state = "playing";
       this.isPaused = false;
-      this.lastTime = performance.now();
-      requestAnimationFrame(this.loop);
+      this.startLoop();
       return;
     }
     this.closeUnlockModal();
@@ -1596,8 +1583,7 @@ class Game {
     this.updateConsumableButtons();
     this.state = "playing";
     this.isPaused = false;
-    this.lastTime = performance.now();
-    requestAnimationFrame(this.loop);
+    this.startLoop();
   }
 
   expandBoardWidth() {
@@ -1716,8 +1702,7 @@ class Game {
     this.updateUpgradeIndicators();
     this.state = "playing";
     this.isPaused = false;
-    this.lastTime = performance.now();
-    requestAnimationFrame(this.loop);
+    this.startLoop();
   }
 
   handlePermanentSelection(type) {
@@ -1814,39 +1799,29 @@ class Game {
     const w = this.board.w;
     const pattern = Array(w).fill(0);
     
-    // Density increases with level (0.3 -> 0.8 max)
-    const density = Math.min(0.8, 0.3 + ((this.level || 1) * 0.025));
-    
-    const mode = Math.floor(Math.random() * 3);
-    if (mode === 0) {
-      // Span
-      const extra = Math.floor((this.level || 1) / 5);
-      const span = Math.max(2, Math.min(w - 1, 3 + extra));
-      const start = Math.max(0, Math.floor(Math.random() * (w - span)));
-      for (let c = start; c < start + span; c++) pattern[c] = 1;
-    } else if (mode === 1) {
-      // Alternating
-      for (let c = 0; c < w; c++) {
-        if (c % 2 === 0) pattern[c] = 1;
-      }
-    } else {
-      // Random with density
-      for (let c = 0; c < w; c++) {
-        if (Math.random() < density) pattern[c] = 1;
-      }
+    // Density calculation based on level
+    // Levels 1-2: 1 obstacle
+    // Level 3+: Exponential increase
+    let obstacleCount = 1;
+    if (this.level >= 3) {
+      // Exponential formula: 1 * (1.2 ^ (level - 2))
+      // e.g. L3=1.2, L4=1.44, L5=1.72... L10=4.3
+      const rawCount = Math.pow(1.2, this.level - 2);
+      obstacleCount = Math.floor(rawCount);
+      // Clamp to ensure at least 1 and max width-1 (so it's not a full wall)
+      obstacleCount = Math.max(1, Math.min(obstacleCount, w - 1));
     }
-    
-    // Ensure not fully blocked
-    if (!pattern.some(v => v === 0)) {
-       const idx = Math.floor(Math.random() * w);
-       pattern[idx] = 0;
-    }
-    
-    if (!pattern.some(v => v)) {
+
+    // Randomly place obstacles
+    let placed = 0;
+    while (placed < obstacleCount) {
       const idx = Math.floor(Math.random() * w);
-      pattern[idx] = 1;
+      if (pattern[idx] === 0) {
+        pattern[idx] = 1;
+        placed++;
+      }
     }
-    
+
     if (typeof this.board.addObstacleRowPattern === 'function') {
       this.board.addObstacleRowPattern(pattern);
     } else {
@@ -1863,32 +1838,40 @@ class Game {
   lockPiece() {
     this.board.mergePiece(this.active);
     const scores = {1:100,2:300,3:500,4:800};
-    if (this.holdSlots && this.holdSlots.length > 1) {
-      const expiredIndices = [];
-      for (let i = 1; i < this.holdSlots.length; i++) {
-        const slot = this.holdSlots[i];
-        if (!slot) continue;
-        if (!Number.isFinite(slot.turnsLeft)) continue;
-        slot.turnsLeft -= 1;
-        if (slot.turnsLeft <= 0) expiredIndices.push(i);
+    
+    // Auto-drop logic for extra hold slots (indices 1 and 2)
+    if (this.holdSlots) {
+      const returnedTypes = [];
+      // Check slot 1
+      if (this.holdSlots[1]) {
+        this.holdSlots[1].turnsLeft--;
+        if (this.holdSlots[1].turnsLeft <= 0) {
+          returnedTypes.push(this.holdSlots[1].type);
+          this.holdSlots[1] = null;
+        }
       }
-      if (expiredIndices.length) {
-        const returnedTypes = [];
-        expiredIndices.sort((a, b) => b - a).forEach(idx => {
-          const slot = this.holdSlots[idx];
-          if (slot && slot.type) returnedTypes.push(slot.type);
-          this.holdSlots.splice(idx, 1);
-        });
+      // Check slot 2
+      if (this.holdSlots[2]) {
+        this.holdSlots[2].turnsLeft--;
+        if (this.holdSlots[2].turnsLeft <= 0) {
+          returnedTypes.push(this.holdSlots[2].type);
+          this.holdSlots[2] = null;
+        }
+      }
+
+      if (returnedTypes.length) {
         if (!this.queue) this.queue = [];
+        // Add returned pieces to the front of the queue
         returnedTypes.forEach(type => {
           this.queue.unshift(type);
         });
-        if (returnedTypes.length && typeof this.showTemporaryMessage === "function") {
-          this.showTemporaryMessage("Held piece returned to queue");
+        if (typeof this.showTemporaryMessage === "function") {
+          this.showTemporaryMessage("Extra held piece dropped!");
         }
         this.updateHoldDisplay();
       }
     }
+
     let cleared = this.board.clearLines();
     if (cleared.length === 0) {
       this.combo = -1;
@@ -1917,12 +1900,9 @@ class Game {
       const obstacleLines = Array.isArray(this.board.lastClearedHadObstacles)
         ? this.board.lastClearedHadObstacles.filter(Boolean).length
         : 0;
-      const baseAdd = (scores[cleared.length] || 0) * this.level;
-      let lineMultiplier = 1;
-      if (hadObstacles) {
-        lineMultiplier = this.obstacleScoreMultiplier || 2;
-      }
-      const add = baseAdd * lineMultiplier;
+      const effectiveLines = Math.max(0, cleared.length - obstacleLines);
+      const baseAdd = (scores[effectiveLines] || 0) * this.level;
+      const add = baseAdd;
       this.combo++;
       let comboBonus = 0;
       if (this.combo > 0) {
@@ -1939,10 +1919,10 @@ class Game {
         }
       }
       this.score += total;
-      this.lines += cleared.length;
+      this.lines += effectiveLines;
       if (this.objectives) {
         const obj = this.objectives;
-        obj.progressLines = obj.progressLines + cleared.length > obj.targetLines ? obj.targetLines : obj.progressLines + cleared.length;
+        obj.progressLines = obj.progressLines + effectiveLines > obj.targetLines ? obj.targetLines : obj.progressLines + effectiveLines;
         obj.progressScore = obj.progressScore + total > obj.targetScore ? obj.targetScore : obj.progressScore + total;
         if (obstacleLines > 0 && obj.targetObstacles > 0) {
           const nextOb = obj.progressObstacles + obstacleLines;
@@ -2035,24 +2015,43 @@ class Game {
     const now = Date.now();
     if (now - this.lastHoldTime < this.holdCooldownTime) return;
 
-    const maxSlots = this.holdCapacity || 1;
-    if (!this.holdSlots) this.holdSlots = [];
-    if (this.holdSlots.length >= maxSlots) {
-      if (typeof this.showTemporaryMessage === "function") {
-        this.showTemporaryMessage("Hold slots full");
+    if (!this.holdSlots) this.holdSlots = [null, null, null];
+    
+    const expandedHold = this.permUpgrades.expandedHold || 0;
+    
+    // Determine target slot: Main (0) -> Extra1 (1) -> Extra2 (2)
+    let targetIndex = -1;
+    
+    if (!this.holdSlots[0]) targetIndex = 0;
+    else if (expandedHold >= 1 && !this.holdSlots[1]) targetIndex = 1;
+    else if (expandedHold >= 2 && !this.holdSlots[2]) targetIndex = 2;
+    
+    // If all appropriate slots are full, swap with Main (0)
+    if (targetIndex === -1) {
+      const primary = this.holdSlots[0];
+      const storedType = primary.type;
+      primary.type = this.active.type;
+      
+      this.active = new Piece(storedType);
+      // Ensure the swapped piece starts at valid position
+      if (!this.valid(this.active, 0, 0, this.active.rot)) {
+         // Reset to spawn defaults if current position is invalid
+         this.active.x = 3;
+         this.active.y = -2;
       }
+      
+      this.lastHoldTime = now;
+      this.updateHoldDisplay();
+      this.renderer.drawBoard();
       return;
     }
 
-    const index = this.holdSlots.length;
-    const baseTurns = index === 0
-      ? Infinity
-      : (this.extraHoldConfig[index - 1] || this.extraHoldConfig[this.extraHoldConfig.length - 1] || 3);
+    const turns = targetIndex === 0 ? Infinity : (targetIndex === 1 ? 3 : 5);
 
-    this.holdSlots.push({
+    this.holdSlots[targetIndex] = {
       type: this.active.type,
-      turnsLeft: baseTurns
-    });
+      turnsLeft: turns
+    };
 
     this.lastHoldTime = now;
     this.updateHoldDisplay();
@@ -2067,7 +2066,7 @@ class Game {
     const now = Date.now();
     if (now - this.lastHoldTime < this.holdCooldownTime) return;
 
-    if (!this.holdSlots || !this.holdSlots.length) return;
+    if (!this.holdSlots || !this.holdSlots[0]) return;
 
     const primary = this.holdSlots[0];
     const newPiece = new Piece(primary.type);
@@ -2086,7 +2085,7 @@ class Game {
       primary.type = prevType;
     } else {
       this.active = newPiece;
-      this.holdSlots.shift();
+      this.holdSlots[0] = null;
     }
 
     this.lastHoldTime = now;
@@ -2098,14 +2097,33 @@ class Game {
   }
 
   updateHoldDisplay() {
-    const hasSlots = Array.isArray(this.holdSlots) && this.holdSlots.length > 0;
-    const primary = hasSlots ? this.holdSlots[0] : null;
-    let helperType = null;
-    if (this.holdCapacity && this.holdCapacity > 1 && this.holdSlots && this.holdSlots.length > 1) {
-      const timed = this.holdSlots[1];
-      if (timed && timed.type) helperType = timed.type;
+    const h1 = byId('hold');
+    const h2 = byId('hold2');
+    const h3 = byId('hold3');
+    const expandedHold = this.permUpgrades.expandedHold || 0;
+    
+    if (h1) {
+       const s0 = this.holdSlots && this.holdSlots[0];
+       this.drawPieceToElement(h1, s0 ? s0.type : null);
     }
-    this.renderer.drawHold(primary, helperType);
+    
+    if (h2) {
+      if (expandedHold >= 1) {
+        const s1 = this.holdSlots && this.holdSlots[1];
+        this.drawPieceToElement(h2, s1 ? s1.type : null);
+      } else {
+        h2.style.display = 'none';
+      }
+    }
+    
+    if (h3) {
+      if (expandedHold >= 2) {
+        const s2 = this.holdSlots && this.holdSlots[2];
+        this.drawPieceToElement(h3, s2 ? s2.type : null);
+      } else {
+        h3.style.display = 'none';
+      }
+    }
   }
 
   useClearRow() {
@@ -2275,6 +2293,7 @@ if (resetPoolBtn && confirmOverlay) {
       confirmOverlay.classList.remove("visible");
       confirmOverlay.setAttribute("aria-hidden", "true");
       game.isPaused = false;
+      game.startLoop();
     });
   }
 
@@ -2283,6 +2302,7 @@ if (resetPoolBtn && confirmOverlay) {
       confirmOverlay.classList.remove("visible");
       confirmOverlay.setAttribute("aria-hidden", "true");
       game.isPaused = false;
+      game.startLoop();
     });
   }
 }
