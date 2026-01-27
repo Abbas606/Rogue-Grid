@@ -989,6 +989,34 @@ class Game {
     if (this.queue.length === 0) this.queue = bagRandom(this.currentPool);
     return this.queue.shift();
   }
+  drawPieceToElement(element, type) {
+    if (!element) return;
+    const cells = Array.from(element.children);
+    for (const c of cells) c.style.backgroundColor = '';
+    
+    if (type) {
+      const piece = new Piece(type);
+      const shape = piece.shape();
+      const color = PIECES[type].color;
+      const w = shape[0].length;
+      const h = shape.length;
+      const startX = Math.floor((6 - w) / 2);
+      const startY = Math.floor((6 - h) / 2);
+      for (let r = 0; r < h; r++) {
+        for (let c = 0; c < w; c++) {
+          if (shape[r][c]) {
+            const idx = (startY + r) * 6 + (startX + c);
+            if (cells[idx]) cells[idx].style.backgroundColor = color;
+          }
+        }
+      }
+      element.style.display = "grid";
+      element.style.opacity = "1";
+    } else {
+      element.style.opacity = "1";
+      element.style.display = "grid";
+    }
+  }
   spawn() {
     const type = this.pullNext();
     this.active = new Piece(type);
