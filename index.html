@@ -13,17 +13,22 @@
       <header class="topbar">
         <h1 aria-label="Game title">Rogue Grid</h1>
         <div class="top-controls">
-          <button id="start-btn" type="button" aria-label="Start game" class="control-btn">Start</button>
-          <button id="pause-btn" type="button" aria-pressed="false" aria-label="Pause or play" class="control-btn">Pause</button>
+          <div class="main-actions">
+            <button id="start-pause-btn" type="button" aria-label="Start game" class="control-btn primary-btn">Start</button>
+            <button id="top-restart-btn" type="button" aria-label="Restart game" class="control-btn danger-btn" style="display:none">Restart</button>
+          </div>
           <div id="consumable-controls" aria-label="Consumable clears">
-            <button id="clear-row-btn" class="control-btn small-btn" type="button">
+            <button id="clear-row-btn" class="control-btn small-btn clear-row" type="button">
               Clear Row (<span id="clear-row-count">0</span>)
             </button>
-            <button id="clear-column-btn" class="control-btn small-btn" type="button">
+            <button id="clear-column-btn" class="control-btn small-btn clear-col" type="button">
               Clear Column (<span id="clear-column-count">0</span>)
             </button>
-            <button id="clear-area-btn" class="control-btn small-btn" type="button">
+            <button id="clear-area-btn" class="control-btn small-btn clear-area" type="button">
               Clear Area (<span id="clear-area-count">0</span>)
+            </button>
+            <button id="gravity-btn" class="control-btn small-btn gravity-opt" type="button">
+              Gravity (<span id="gravity-cost">10</span>)
             </button>
           </div>
         </div>

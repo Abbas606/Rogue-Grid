@@ -37,8 +37,8 @@ const objectivesEl = byId("objectives");
 const objLinesEl = byId("obj-lines");
 const objObstaclesEl = byId("obj-obstacles");
 const objScoreEl = byId("obj-score");
-const pauseBtn = byId("pause-btn");
-const startBtn = byId("start-btn");
+const startPauseBtn = byId("start-pause-btn");
+const topRestartBtn = byId("top-restart-btn");
 const overlayEl = byId("overlay");
 const restartBtn = byId("restart-btn");
 const summaryScoreEl = byId("summary-score");
@@ -206,6 +206,7 @@ const UPGRADE_DEFS = [
   { id: 'expand_board', name: '+1 Board', type: 'perm', weight: 1, icon: '⬌', desc: 'Add one column to the board (max +5)' },
   { id: 'piece_removal', name: 'Remove Piece', type: 'perm', weight: 2, icon: '🗑️', desc: 'Remove a piece type' },
   { id: 'obstacle_mode', name: 'Obstacle Focus', type: 'perm', weight: 1, icon: '🧱', desc: 'Stronger obstacles that give more points' },
+  { id: 'gravity_cost_down', name: 'Gravity Opt', type: 'perm', weight: 2, icon: '📉', desc: 'Reduces Gravity power-up cost by 1' },
 ];
 const pickWeighted = (items, count) => {
   const pool = [];
@@ -265,7 +266,7 @@ class Board {
       }
     }
     if (cleared.length > 0) {
-      this.applyGravity();
+      // this.applyGravity(); // Gravity is now a manual power-up
     }
     this.lastClearedHadObstacles = clearedHadObstacles;
     return cleared;
@@ -591,6 +592,8 @@ class Game {
       maxMultiplier: BASE_GRAVITY_MS / SPEEDUP_MIN_MS,
     };
     this.speedUpPerLevel = 1;
+    this.gravityCharges = 0;
+    this.gravityCostBase = 10;
     this.tempUpgrades = {
       speedUpLevels: 0,
       rerollCharges: 0,
@@ -676,6 +679,10 @@ class Game {
     }
     if (clearAreaBtn) {
       clearAreaBtn.addEventListener("click", () => this.useClearArea());
+    }
+    const gravityBtn = byId('gravity-btn');
+    if (gravityBtn) {
+      gravityBtn.addEventListener("click", () => this.useGravity());
     }
 
     // Add event listener for unlock modal closure
@@ -764,7 +771,11 @@ class Game {
     linesEl.textContent = "0";
     levelEl.textContent = "1";
     achievementsEl.textContent = "";
-    if (pauseBtn) pauseBtn.disabled = true;
+    if (startPauseBtn) {
+      startPauseBtn.textContent = "Start";
+      startPauseBtn.disabled = false;
+    }
+    if (topRestartBtn) topRestartBtn.style.display = 'none';
     const ind = byId('upgrade-indicators');
     if (ind) ind.innerHTML = '';
     this.updateConsumableButtons();
@@ -904,10 +915,30 @@ class Game {
     if (clearRowCountEl) clearRowCountEl.textContent = String(rowCount);
     if (clearColCountEl) clearColCountEl.textContent = String(colCount);
     if (clearAreaCountEl) clearAreaCountEl.textContent = String(areaCount);
+    
     const canUse = this.state === "playing" && !this.isPaused;
+    
     clearRowBtn.disabled = !(rowCount > 0 && canUse);
     clearColBtn.disabled = !(colCount > 0 && canUse);
     clearAreaBtn.disabled = !(areaCount > 0 && canUse);
+
+    const gravityBtn = byId('gravity-btn');
+    if (gravityBtn) {
+       const cost = Math.max(1, this.gravityCostBase - (this.permUpgrades.gravityCostReduction || 0));
+       gravityBtn.textContent = `Gravity (Cost: ${cost}) [${this.gravityCharges}]`;
+       gravityBtn.disabled = !(this.gravityCharges >= cost && canUse);
+    }
+  }
+
+  useGravity() {
+    if (this.state !== "playing" || this.isPaused) return;
+    const cost = Math.max(1, this.gravityCostBase - (this.permUpgrades.gravityCostReduction || 0));
+    if (this.gravityCharges >= cost) {
+      this.gravityCharges -= cost;
+      this.board.applyGravity();
+      this.renderer.drawBoard();
+      this.updateConsumableButtons();
+    }
   }
 
   startLoop() {
@@ -929,7 +960,11 @@ class Game {
     this.reset();
     this.state = "playing";
     this.isPaused = false;
-    if (pauseBtn) { pauseBtn.disabled = false; pauseBtn.setAttribute("aria-pressed","false"); pauseBtn.textContent = "Pause"; }
+    if (startPauseBtn) { 
+      startPauseBtn.textContent = "Pause"; 
+      startPauseBtn.disabled = false;
+    }
+    if (topRestartBtn) topRestartBtn.style.display = 'inline-block';
     this.startLoop();
   }
   loop(time) {
@@ -1023,7 +1058,7 @@ class Game {
     if (!this.valid(this.active, 0, 0, this.active.rot)) {
       this.state = "gameover";
       achievementsEl.textContent = "Game Over";
-      if (pauseBtn) { pauseBtn.setAttribute("aria-pressed", "false"); pauseBtn.textContent = "Pause"; }
+      if (startPauseBtn) { startPauseBtn.setAttribute("aria-pressed", "false"); startPauseBtn.textContent = "Start"; }
       return;
     }
     if (this.queue.length === 0) this.queue = bagRandom(this.currentPool);
@@ -1092,7 +1127,7 @@ class Game {
     for (const [bx,by] of piece.blocks(rot)) {
       const r = piece.y + by + dy;
       const c = piece.x + bx + dx;
-      if (c < 0 || c >= W || r >= H) return false;
+      if (c < 0 || c >= this.board.w || r >= this.board.h) return false;
       if (r >= 0 && this.board.get(r, c)) return false;
     }
     return true;
@@ -1210,23 +1245,37 @@ class Game {
       const list = this.keyBindings.softDrop;
       if (list && list.includes(code)) this.softDropping = false;
     });
-    pauseBtn.addEventListener("click", () => {
-      if (this.state === "playing") {
-        this.state = "paused";
-        this.isPaused = true;
-        pauseBtn.setAttribute("aria-pressed","true");
-        pauseBtn.textContent = "Play";
-        this.updateConsumableButtons();
-      } else if (this.state === "paused") {
-        this.state = "playing";
-        this.isPaused = false;
-        pauseBtn.setAttribute("aria-pressed","false");
-        pauseBtn.textContent = "Pause";
-        this.startLoop();
-        this.updateConsumableButtons();
-      }
-    });
-    if (startBtn) startBtn.addEventListener("click", () => { this.start(); });
+    if (startPauseBtn) {
+      startPauseBtn.addEventListener("click", () => {
+        if (this.state === "playing") {
+          this.state = "paused";
+          this.isPaused = true;
+          startPauseBtn.textContent = "Resume";
+          this.updateConsumableButtons();
+        } else if (this.state === "paused") {
+          this.state = "playing";
+          this.isPaused = false;
+          startPauseBtn.textContent = "Pause";
+          this.startLoop();
+          this.updateConsumableButtons();
+        } else {
+          this.start();
+        }
+      });
+    }
+    if (topRestartBtn) {
+      topRestartBtn.addEventListener("click", () => {
+        // Simple confirm
+        if (this.state === "playing" || this.state === "paused") {
+           // Maybe no confirm needed if it's a fast paced game, but standard is nice.
+           // User didn't ask for confirm, but it's safe.
+           // Let's just restart. "Rogue-like" usually allows quick restart.
+           this.start();
+        } else {
+           this.start();
+        }
+      });
+    }
     if (restartBtn) restartBtn.addEventListener("click", () => {
       if (overlayEl) {
         overlayEl.classList.remove("visible");
@@ -1311,21 +1360,8 @@ class Game {
 
     const pieceOptions = this.generateUnlockOptions(3);
     const upgradeOptions = pickWeighted(UPGRADE_DEFS, 3);
-    const combined = [];
-    pieceOptions.forEach(type => combined.push({ kind: 'piece', value: type }));
-    upgradeOptions.forEach(up => combined.push({ kind: 'upgrade', value: up }));
-    if (!combined.length) return;
-    for (let i = combined.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      const tmp = combined[i];
-      combined[i] = combined[j];
-      combined[j] = tmp;
-    }
-    const chosen = combined.slice(0, 3);
-    const chosenPieces = chosen.filter(x => x.kind === 'piece').map(x => x.value);
-    const chosenUpgrades = chosen.filter(x => x.kind === 'upgrade').map(x => x.value);
-    if (!chosenPieces.length && !chosenUpgrades.length) return;
-    const options = { pieces: chosenPieces, upgrades: chosenUpgrades, mode: 'mixed' };
+    
+    const options = { pieces: pieceOptions, upgrades: upgradeOptions };
 
     this.state = "unlocking";
     this.isPaused = true;
@@ -1337,6 +1373,8 @@ class Game {
     const container = document.getElementById('unlock-options');
     if (!modal || !container) return;
 
+    modal.onkeydown = null;
+    
     const oldBtn = modal.querySelector('.reroll-btn');
     if (oldBtn) oldBtn.remove();
 
@@ -1348,66 +1386,17 @@ class Game {
     if (isPermanent) {
       title.textContent = "Run Complete!";
       sub.textContent = "Choose one piece to KEEP permanently:";
-    } else {
-      title.textContent = "Level Up";
-      sub.textContent = "Choose one new option:";
-    }
-
-    const pieces = isPermanent ? optionsOrPieces : optionsOrPieces.pieces;
-    const upgrades = isPermanent ? [] : optionsOrPieces.upgrades;
-
-    (pieces || []).forEach(type => {
-      const card = document.createElement('div');
-      card.className = 'unlock-card';
-      card.setAttribute('role', 'button');
-      card.tabIndex = 0;
-      const pieceLabel = isPermanent ? `Keep piece ${type} permanently` : `Add piece ${type} to this run`;
-      card.title = pieceLabel;
-      card.setAttribute('aria-label', pieceLabel);
-      const onSelect = () => isPermanent ? this.handlePermanentSelection(type) : this.handleUnlockSelection(type);
-      card.onclick = onSelect;
-      card.onkeydown = (e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          onSelect();
-        }
-      };
-
-      const p = PIECES[type];
-      const prev = document.createElement('div');
-      prev.className = 'unlock-preview';
-
-      const mini = this.createMiniPiece(type, 8);
-      mini.style.position = 'absolute';
-      mini.style.top = '50%';
-      mini.style.left = '50%';
-      mini.style.transform = 'translate(-50%, -50%)';
-      prev.appendChild(mini);
-
-      const label = document.createElement('div');
-      label.className = 'unlock-title';
-      label.textContent = type;
-
-      card.appendChild(prev);
-      card.appendChild(label);
-      container.appendChild(card);
-    });
-
-    if (!isPermanent && upgrades && upgrades.length) {
-      const divider = document.createElement('div');
-      divider.style.marginTop = '8px';
-      divider.style.color = 'var(--muted)';
-      divider.textContent = 'Upgrades';
-      container.appendChild(divider);
-      upgrades.forEach(up => {
+      
+      const pieces = optionsOrPieces;
+      pieces.forEach(type => {
         const card = document.createElement('div');
         card.className = 'unlock-card';
         card.setAttribute('role', 'button');
         card.tabIndex = 0;
-        const upLabel = up.desc ? `${up.name}: ${up.desc}` : up.name;
-        card.title = upLabel;
-        card.setAttribute('aria-label', upLabel);
-        const onSelect = () => this.applyUpgrade(up.id);
+        const pieceLabel = `Keep piece ${type} permanently`;
+        card.title = pieceLabel;
+        card.setAttribute('aria-label', pieceLabel);
+        const onSelect = () => this.handlePermanentSelection(type);
         card.onclick = onSelect;
         card.onkeydown = (e) => {
           if (e.key === 'Enter' || e.key === ' ') {
@@ -1415,33 +1404,200 @@ class Game {
             onSelect();
           }
         };
+
+        const p = PIECES[type];
         const prev = document.createElement('div');
         prev.className = 'unlock-preview';
-        prev.textContent = up.icon;
-        prev.style.fontSize = '28px';
-        prev.style.display = 'flex';
-        prev.style.alignItems = 'center';
-        prev.style.justifyContent = 'center';
+
+        const mini = this.createMiniPiece(type, 8);
+        mini.style.position = 'absolute';
+        mini.style.top = '50%';
+        mini.style.left = '50%';
+        mini.style.transform = 'translate(-50%, -50%)';
+        prev.appendChild(mini);
+
         const label = document.createElement('div');
         label.className = 'unlock-title';
-        label.textContent = up.name;
+        label.textContent = type;
+
         card.appendChild(prev);
         card.appendChild(label);
         container.appendChild(card);
       });
-    }
+    } else {
+      // LEVEL UP MODE
+      title.textContent = "Level Up";
+      sub.textContent = "Select items to add (max 1 piece, max 1 upgrade):";
+      
+      this.selectedUnlockPiece = null;
+      this.selectedUnlockUpgrade = null;
+      
+      const pieces = optionsOrPieces.pieces || [];
+      const upgrades = optionsOrPieces.upgrades || [];
 
-    const canReroll = !isPermanent && (this.tempUpgrades.rerollCharges > 0 || !this.rerollUsed);
-    if (canReroll) {
-      const btn = document.createElement('button');
-      btn.className = 'reroll-btn';
-      btn.textContent = this.tempUpgrades.rerollCharges > 0 ? `Re-roll (${this.tempUpgrades.rerollCharges})` : 'Re-roll';
-       btn.setAttribute('aria-label', 'Re-roll upgrade choices');
-      btn.onclick = () => {
-        if (this.tempUpgrades.rerollCharges > 0) this.tempUpgrades.rerollCharges--;
-        this.handleReroll();
+      // Pieces Section
+      if (pieces.length > 0) {
+        const pTitle = document.createElement('div');
+        pTitle.className = 'unlock-group-title';
+        pTitle.textContent = 'New Pieces';
+        container.appendChild(pTitle);
+
+        const pGrid = document.createElement('div');
+        pGrid.className = 'unlock-grid';
+        
+        pieces.forEach(type => {
+          const card = document.createElement('div');
+          card.className = 'unlock-card selectable';
+          card.setAttribute('role', 'button');
+          card.tabIndex = 0;
+          
+          const prev = document.createElement('div');
+          prev.className = 'unlock-preview';
+          const mini = this.createMiniPiece(type, 8);
+          mini.style.position = 'absolute';
+          mini.style.top = '50%';
+          mini.style.left = '50%';
+          mini.style.transform = 'translate(-50%, -50%)';
+          prev.appendChild(mini);
+          
+          const label = document.createElement('div');
+          label.className = 'unlock-title';
+          label.textContent = type;
+          
+          card.appendChild(prev);
+          card.appendChild(label);
+          
+          const onSelectPiece = () => {
+             if (this.selectedUnlockPiece === type) {
+               this.selectedUnlockPiece = null;
+               card.classList.remove('selected');
+             } else {
+               this.selectedUnlockPiece = type;
+               // Deselect others in this grid
+               Array.from(pGrid.children).forEach(c => c.classList.remove('selected'));
+               card.classList.add('selected');
+             }
+             this.updateUnlockConfirmButton();
+          };
+          card.onclick = onSelectPiece;
+          card.onkeydown = (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              onSelectPiece();
+            }
+          };
+          
+          pGrid.appendChild(card);
+        });
+        container.appendChild(pGrid);
+      }
+
+      // Upgrades Section
+      if (upgrades.length > 0) {
+        const uTitle = document.createElement('div');
+        uTitle.className = 'unlock-group-title';
+        uTitle.textContent = 'Upgrades';
+        container.appendChild(uTitle);
+
+        const uGrid = document.createElement('div');
+        uGrid.className = 'unlock-grid';
+        
+        upgrades.forEach(up => {
+          const card = document.createElement('div');
+          card.className = 'unlock-card selectable';
+          card.setAttribute('role', 'button');
+          card.tabIndex = 0;
+          
+          const prev = document.createElement('div');
+          prev.className = 'unlock-preview';
+          prev.textContent = up.icon;
+          prev.style.fontSize = '28px';
+          prev.style.display = 'flex';
+          prev.style.alignItems = 'center';
+          prev.style.justifyContent = 'center';
+          
+          const label = document.createElement('div');
+          label.className = 'unlock-title';
+          label.textContent = up.name;
+          
+          const desc = document.createElement('div');
+          desc.className = 'unlock-desc';
+          desc.textContent = up.desc || '';
+          
+          card.appendChild(prev);
+          card.appendChild(label);
+          card.appendChild(desc);
+          
+          const onSelectUpgrade = () => {
+             if (this.selectedUnlockUpgrade === up) {
+               this.selectedUnlockUpgrade = null;
+               card.classList.remove('selected');
+             } else {
+               this.selectedUnlockUpgrade = up;
+               // Deselect others in this grid
+               Array.from(uGrid.children).forEach(c => c.classList.remove('selected'));
+               card.classList.add('selected');
+             }
+             this.updateUnlockConfirmButton();
+          };
+          card.onclick = onSelectUpgrade;
+          card.onkeydown = (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              onSelectUpgrade();
+            }
+          };
+          
+          uGrid.appendChild(card);
+        });
+        container.appendChild(uGrid);
+      }
+
+      // Actions
+      const actions = document.createElement('div');
+      actions.className = 'unlock-actions';
+      
+      const skipBtn = document.createElement('button');
+      skipBtn.className = 'unlock-btn skip';
+      skipBtn.textContent = 'Skip';
+      skipBtn.onclick = () => {
+         this.closeUnlockModal();
+         this.state = "playing";
+         this.isPaused = false;
+         this.startLoop();
       };
-      container.parentElement.appendChild(btn);
+      
+      const confirmBtn = document.createElement('button');
+      confirmBtn.id = 'unlock-confirm-btn';
+      confirmBtn.className = 'unlock-btn confirm';
+      confirmBtn.textContent = 'Confirm Selection';
+      confirmBtn.disabled = true;
+      confirmBtn.onclick = () => this.handleUnlockConfirm();
+      
+      actions.appendChild(skipBtn);
+      actions.appendChild(confirmBtn);
+      container.appendChild(actions);
+
+      modal.onkeydown = (e) => {
+         if (e.key === 'Escape') {
+            e.preventDefault();
+            skipBtn.click();
+         }
+      };
+
+      const canReroll = !isPermanent && (this.tempUpgrades.rerollCharges > 0 || !this.rerollUsed);
+      if (canReroll) {
+        const btn = document.createElement('button');
+        btn.className = 'unlock-btn skip';
+        btn.textContent = this.tempUpgrades.rerollCharges > 0 ? `Re-roll (${this.tempUpgrades.rerollCharges})` : 'Re-roll';
+        btn.setAttribute('aria-label', 'Re-roll upgrade choices');
+        btn.onclick = () => {
+          if (this.tempUpgrades.rerollCharges > 0) this.tempUpgrades.rerollCharges--;
+          this.handleReroll();
+        };
+        // Insert as first action or just append
+        actions.insertBefore(btn, actions.firstChild);
+      }
     }
 
     modal.classList.add('visible');
@@ -1450,6 +1606,34 @@ class Game {
       const firstCard = container.querySelector('.unlock-card');
       if (firstCard) firstCard.focus();
     }, 0);
+  }
+
+  updateUnlockConfirmButton() {
+     const btn = document.getElementById('unlock-confirm-btn');
+     if (btn) {
+       btn.disabled = (!this.selectedUnlockPiece && !this.selectedUnlockUpgrade);
+     }
+  }
+
+  handleUnlockConfirm() {
+     if (this.selectedUnlockPiece) {
+       this.handleUnlockSelection(this.selectedUnlockPiece, true);
+     }
+     
+     let keepModal = false;
+     if (this.selectedUnlockUpgrade) {
+       if (this.selectedUnlockUpgrade.id === 'piece_removal' && this.currentPool.length > 0) {
+         keepModal = true;
+       }
+       this.applyUpgrade(this.selectedUnlockUpgrade.id, true);
+     }
+     
+     if (!keepModal) {
+       this.closeUnlockModal();
+       this.state = "playing";
+       this.isPaused = false;
+       this.startLoop();
+     }
   }
 
   handleReroll() {
@@ -1469,15 +1653,17 @@ class Game {
     this.updatePoolDisplay();
   }
 
-  handleUnlockSelection(type) {
+  handleUnlockSelection(type, skipResume = false) {
     this.currentPool.push(type);
     this.runUnlocks.push(type);
     this.updatePoolDisplay();
-    this.closeUnlockModal();
-
-    this.state = "playing";
-    this.isPaused = false;
-    this.startLoop();
+    
+    if (!skipResume) {
+      this.closeUnlockModal();
+      this.state = "playing";
+      this.isPaused = false;
+      this.startLoop();
+    }
   }
   recordUpgradeSelection(id) {
     try {
@@ -1525,7 +1711,7 @@ class Game {
       addBadge(`⏱ ${mult}x`, 'speed-badge');
     }
   }
-  applyUpgrade(id) {
+  applyUpgrade(id, skipResume = false) {
     this.recordUpgradeSelection(id);
     if (id === 'speed_up') {
       const cfg = this.speedUpConfig || {};
@@ -1554,7 +1740,10 @@ class Game {
       this.triggerUpgradeEffect();
     } else if (id === 'piece_removal') {
       const candidates = [...this.currentPool];
-      if (!candidates.length) { this.closeUnlockModal(); return; }
+      if (!candidates.length) { 
+        if (!skipResume) this.closeUnlockModal(); 
+        return; 
+      }
       this.startPieceRemovalSelection(candidates);
       return;
     } else if (id === 'obstacle_mode') {
@@ -1600,18 +1789,31 @@ class Game {
       }
       this.updateUpgradeIndicators();
       this.updateObjectivesDisplay();
+      if (!skipResume) {
+        this.closeUnlockModal();
+        this.state = "playing";
+        this.isPaused = false;
+        this.startLoop();
+      }
+      return;
+    } else if (id === 'gravity_cost_down') {
+      this.permUpgrades.gravityCostReduction = (this.permUpgrades.gravityCostReduction || 0) + 1;
+      achievementsEl.textContent = "Gravity Cost Reduced!";
+      this.triggerUpgradeEffect();
+      this.updateConsumableButtons();
+    }
+    
+    if (!skipResume) {
       this.closeUnlockModal();
+      this.updateUpgradeIndicators();
+      this.updateConsumableButtons();
       this.state = "playing";
       this.isPaused = false;
       this.startLoop();
-      return;
+    } else {
+      this.updateUpgradeIndicators();
+      this.updateConsumableButtons();
     }
-    this.closeUnlockModal();
-    this.updateUpgradeIndicators();
-    this.updateConsumableButtons();
-    this.state = "playing";
-    this.isPaused = false;
-    this.startLoop();
   }
 
   expandBoardWidth() {
@@ -1758,9 +1960,8 @@ class Game {
     }
     clearWarningBanner();
     this.active = null;
-    if (pauseBtn) {
-      pauseBtn.setAttribute("aria-pressed", "false");
-      pauseBtn.textContent = "Pause";
+    if (startPauseBtn) {
+      startPauseBtn.textContent = "Start";
     }
     this.renderer.drawBoard();
     this.updateConsumableButtons();
@@ -1967,6 +2168,10 @@ class Game {
         break;
       }
       cleared = this.board.clearLines();
+      if (cleared.length > 0) {
+         this.gravityCharges += cleared.length;
+         this.updateConsumableButtons();
+      }
     }
     this.updateUpgradeIndicators();
     if (this.board.grid[0].some(v => v)) {
@@ -2335,8 +2540,4 @@ if (resetPoolBtn && confirmOverlay) {
   }
 }
 
-if (document.readyState !== "loading") {
-  if (pauseBtn) pauseBtn.disabled = true;
-} else {
-  document.addEventListener("DOMContentLoaded", () => { if (pauseBtn) pauseBtn.disabled = true; });
-}
+
