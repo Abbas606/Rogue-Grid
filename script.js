@@ -105,6 +105,7 @@ const makeCells = (container, rows, cols, cls) => {
 
 makeCells(boardEl, H, W, "cell");
 makeCells(previewEl, 6, 6, "preview-cell");
+makeCells(holdEl, 6, 6, "preview-cell");
 const previewEl2 = byId("preview2");
 if (previewEl2) makeCells(previewEl2, 6, 6, "preview-cell");
 const previewEl3 = byId("preview3");
@@ -497,7 +498,6 @@ class Renderer {
   }
 
   // drawHold removed as it is no longer used
-}
 }
 
 const tweenNumber = (el, to, dur = 400) => {
