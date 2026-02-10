@@ -109,10 +109,8 @@ const previewEl2 = byId("preview2");
 if (previewEl2) makeCells(previewEl2, 6, 6, "preview-cell");
 const previewEl3 = byId("preview3");
 if (previewEl3) makeCells(previewEl3, 6, 6, "preview-cell");
-const holdEl2 = byId("hold2");
-if (holdEl2) makeCells(holdEl2, 6, 6, "preview-cell");
-const holdEl3 = byId("hold3");
-if (holdEl3) makeCells(holdEl3, 6, 6, "preview-cell");
+const holdEl2 = null;
+const holdEl3 = null;
 particlesCanvas.width = boardEl.clientWidth;
 particlesCanvas.height = boardEl.clientHeight;
 particlesCtx = particlesCanvas.getContext("2d");
@@ -202,7 +200,6 @@ const UPGRADE_DEFS = [
   { id: 'clear_column', name: 'Clear Column', type: 'temp', weight: 1, icon: '➕', desc: 'Gain a consumable that clears a random column' },
   { id: 'clear_area', name: 'Clear Area', type: 'temp', weight: 1, icon: '⛰', desc: 'Gain a consumable that clears a 3x3 area' },
   { id: 'expanded_preview', name: '+1 Next', type: 'perm', weight: 2, icon: '🔭', desc: 'Show +1 next piece (stackable)' },
-  { id: 'expanded_hold', name: '+1 Hold', type: 'perm', weight: 2, icon: '📥', desc: 'Add an extra timed hold cell (stackable)' },
   { id: 'expand_board', name: '+1 Board', type: 'perm', weight: 1, icon: '⬌', desc: 'Add one column to the board (max +5)' },
   { id: 'piece_removal', name: 'Remove Piece', type: 'perm', weight: 2, icon: '🗑️', desc: 'Remove a piece type' },
   { id: 'obstacle_mode', name: 'Obstacle Focus', type: 'perm', weight: 1, icon: '🧱', desc: 'Stronger obstacles that give more points' },
@@ -499,45 +496,8 @@ class Renderer {
     if (previewWrap) { previewWrap.classList.add("active"); setTimeout(()=>previewWrap.classList.remove("active"), 220); }
   }
 
-  drawHold(holdSlots) {
-    const slots = [holdEl, holdEl2, holdEl3];
-    const data = (holdSlots || []).map(s => (s && s.type) ? s.type : (s && typeof s === 'string' ? s : null));
-
-    slots.forEach((el, i) => {
-      if (!el) return;
-      const type = data[i];
-      const cells = Array.from(el.children);
-      for (const c of cells) c.style.backgroundColor = '';
-
-      if (type) {
-        const piece = new Piece(type);
-        const shape = piece.shape();
-        const color = PIECES[type].color;
-        const w = shape[0].length;
-        const h = shape.length;
-        const startX = Math.floor((6 - w) / 2);
-        const startY = Math.floor((6 - h) / 2);
-        for (let r = 0; r < h; r++) {
-          for (let c = 0; c < w; c++) {
-            if (shape[r][c]) {
-              const idx = (startY + r) * 6 + (startX + c);
-              if (cells[idx]) cells[idx].style.backgroundColor = color;
-            }
-          }
-        }
-        el.style.display = "grid";
-        el.style.opacity = "1";
-      } else {
-        // Hide extra slots if empty, but keep primary visible (as empty grid)
-        if (i === 0) {
-          el.style.opacity = "1";
-          el.style.display = "grid";
-        } else {
-          el.style.display = "none";
-        }
-      }
-    });
-  }
+  // drawHold removed as it is no longer used
+}
 }
 
 const tweenNumber = (el, to, dur = 400) => {
@@ -619,13 +579,10 @@ class Game {
     this.extraBoardColumns = 0;
 
     // Hold/Release System
-    this.holdSlots = [];
+    this.holdPiece = null;
     this.holdCooldown = 0;
     this.holdCooldownTime = 500;
     this.lastHoldTime = 0;
-    this.holdCapacity = 1;
-    this.maxExtraHolds = 2;
-    this.extraHoldConfig = [3, 5];
 
     this.obstacleScoreMultiplier = 2;
     this.obstaclePieceInterval = 4;
@@ -1359,7 +1316,14 @@ class Game {
     }
 
     const pieceOptions = this.generateUnlockOptions(3);
-    const upgradeOptions = pickWeighted(UPGRADE_DEFS, 3);
+    
+    // Filter out capped upgrades
+    const availableUpgrades = UPGRADE_DEFS.filter(u => {
+      if (u.id === 'expanded_preview' && (this.permUpgrades.expandedPreview || 0) >= 2) return false;
+      return true;
+    });
+    
+    const upgradeOptions = pickWeighted(availableUpgrades, 3);
     
     const options = { pieces: pieceOptions, upgrades: upgradeOptions };
 
@@ -1703,7 +1667,6 @@ class Game {
     }
     if (this.secondChanceAvailable) addBadge('❤️');
     if (this.permUpgrades.expandedPreview) addBadge('🔭');
-    if (this.holdCapacity && this.holdCapacity > 1) addBadge('📥');
     if (this.obstacleScoreMultiplier && this.obstacleScoreMultiplier > 2) addBadge('🧱');
     const speedMs = this.ticksForLevel();
     if (speedMs > 0) {
@@ -1733,11 +1696,11 @@ class Game {
       this.permUpgrades.expandedPreview = (this.permUpgrades.expandedPreview || 0) + 1;
       achievementsEl.textContent = "+1 Next unlocked!";
       this.triggerUpgradeEffect();
-    } else if (id === 'expanded_hold') {
-      this.permUpgrades.expandedHold = (this.permUpgrades.expandedHold || 0) + 1;
-      this.holdCapacity = 1 + this.permUpgrades.expandedHold;
-      achievementsEl.textContent = "+1 Hold cell unlocked!";
-      this.triggerUpgradeEffect();
+      
+      // Reposition objectives if max expansion reached
+      if (this.permUpgrades.expandedPreview >= 2) {
+        this.moveObjectivesUnderBoard();
+      }
     } else if (id === 'piece_removal') {
       const candidates = [...this.currentPool];
       if (!candidates.length) { 
@@ -1813,6 +1776,36 @@ class Game {
     } else {
       this.updateUpgradeIndicators();
       this.updateConsumableButtons();
+    }
+  }
+
+  moveObjectivesUnderBoard() {
+    const objEl = document.getElementById('objectives');
+    const boardWrap = document.getElementById('board-wrap');
+    const sidebar = document.getElementById('sidebar');
+    
+    if (!objEl || !boardWrap || !sidebar) return;
+    
+    // If expanded preview is maxed (2 upgrades = 3 slots), move objectives
+    if ((this.permUpgrades.expandedPreview || 0) >= 2) {
+       if (objEl.parentElement !== boardWrap) {
+         boardWrap.appendChild(objEl);
+         objEl.classList.add('objectives-under-board');
+         // Ensure it's visible
+         objEl.style.display = 'block';
+       }
+    } else {
+       // Move back to sidebar if not maxed
+       if (objEl.parentElement !== sidebar) {
+         // Insert before warning-banner if possible, or append
+         const warning = document.getElementById('warning-banner');
+         if (warning && warning.parentElement === sidebar) {
+           sidebar.insertBefore(objEl, warning);
+         } else {
+           sidebar.appendChild(objEl);
+         }
+         objEl.classList.remove('objectives-under-board');
+       }
     }
   }
 
@@ -2068,39 +2061,6 @@ class Game {
     this.board.mergePiece(this.active);
     const scores = {1:100,2:300,3:500,4:800};
     
-    // Auto-drop logic for extra hold slots (indices 1 and 2)
-    if (this.holdSlots) {
-      const returnedTypes = [];
-      // Check slot 1
-      if (this.holdSlots[1]) {
-        this.holdSlots[1].turnsLeft--;
-        if (this.holdSlots[1].turnsLeft <= 0) {
-          returnedTypes.push(this.holdSlots[1].type);
-          this.holdSlots[1] = null;
-        }
-      }
-      // Check slot 2
-      if (this.holdSlots[2]) {
-        this.holdSlots[2].turnsLeft--;
-        if (this.holdSlots[2].turnsLeft <= 0) {
-          returnedTypes.push(this.holdSlots[2].type);
-          this.holdSlots[2] = null;
-        }
-      }
-
-      if (returnedTypes.length) {
-        if (!this.queue) this.queue = [];
-        // Add returned pieces to the front of the queue
-        returnedTypes.forEach(type => {
-          this.queue.unshift(type);
-        });
-        if (typeof this.showTemporaryMessage === "function") {
-          this.showTemporaryMessage("Extra held piece dropped!");
-        }
-        this.updateHoldDisplay();
-      }
-    }
-
     let cleared = this.board.clearLines();
     if (cleared.length === 0) {
       this.combo = -1;
@@ -2248,114 +2208,37 @@ class Game {
     const now = Date.now();
     if (now - this.lastHoldTime < this.holdCooldownTime) return;
 
-    if (!this.holdSlots) this.holdSlots = [null, null, null];
-    
-    const expandedHold = this.permUpgrades.expandedHold || 0;
-    
-    // Determine target slot: Main (0) -> Extra1 (1) -> Extra2 (2)
-    let targetIndex = -1;
-    
-    if (!this.holdSlots[0]) targetIndex = 0;
-    else if (expandedHold >= 1 && !this.holdSlots[1]) targetIndex = 1;
-    else if (expandedHold >= 2 && !this.holdSlots[2]) targetIndex = 2;
-    
-    // If all appropriate slots are full, swap with Main (0)
-    if (targetIndex === -1) {
-      const primary = this.holdSlots[0];
-      const storedType = primary.type;
-      primary.type = this.active.type;
+    if (!this.holdPiece) {
+      // First hold
+      this.holdPiece = this.active.type;
+      this.active = null;
+      this.spawn();
+    } else {
+      // Swap
+      const temp = this.holdPiece;
+      this.holdPiece = this.active.type;
+      this.active = new Piece(temp);
       
-      this.active = new Piece(storedType);
       // Ensure the swapped piece starts at valid position
       if (!this.valid(this.active, 0, 0, this.active.rot)) {
-         // Reset to spawn defaults if current position is invalid
          this.active.x = 3;
          this.active.y = -2;
       }
-      
-      this.lastHoldTime = now;
-      this.updateHoldDisplay();
-      this.renderer.drawBoard();
-      return;
     }
-
-    const turns = targetIndex === 0 ? Infinity : (targetIndex === 1 ? 3 : 5);
-
-    this.holdSlots[targetIndex] = {
-      type: this.active.type,
-      turnsLeft: turns
-    };
 
     this.lastHoldTime = now;
     this.updateHoldDisplay();
-    this.active = null;
-    this.spawn();
     this.renderer.drawBoard();
   }
 
   release() {
-    if (this.state !== "playing") return;
-
-    const now = Date.now();
-    if (now - this.lastHoldTime < this.holdCooldownTime) return;
-
-    if (!this.holdSlots || !this.holdSlots[0]) return;
-
-    const primary = this.holdSlots[0];
-    const newPiece = new Piece(primary.type);
-    if (!this.valid(newPiece, 0, 0, newPiece.rot)) {
-      newPiece.x = Math.floor(W / 2);
-      newPiece.y = -2;
-      newPiece.rot = 0;
-      if (!this.valid(newPiece, 0, 0, newPiece.rot)) {
-        return;
-      }
-    }
-
-    if (this.active) {
-      const prevType = this.active.type;
-      this.active = newPiece;
-      primary.type = prevType;
-    } else {
-      this.active = newPiece;
-      this.holdSlots[0] = null;
-    }
-
-    this.lastHoldTime = now;
-
-    this.updateHoldDisplay();
-    this.renderer.drawBoard();
-    this.renderer.drawGhost(this.active);
-    this.renderer.drawActive(this.active);
+    this.hold();
   }
 
   updateHoldDisplay() {
     const h1 = byId('hold');
-    const h2 = byId('hold2');
-    const h3 = byId('hold3');
-    const expandedHold = this.permUpgrades.expandedHold || 0;
-    
     if (h1) {
-       const s0 = this.holdSlots && this.holdSlots[0];
-       this.drawPieceToElement(h1, s0 ? s0.type : null);
-    }
-    
-    if (h2) {
-      if (expandedHold >= 1) {
-        const s1 = this.holdSlots && this.holdSlots[1];
-        this.drawPieceToElement(h2, s1 ? s1.type : null);
-      } else {
-        h2.style.display = 'none';
-      }
-    }
-    
-    if (h3) {
-      if (expandedHold >= 2) {
-        const s2 = this.holdSlots && this.holdSlots[2];
-        this.drawPieceToElement(h3, s2 ? s2.type : null);
-      } else {
-        h3.style.display = 'none';
-      }
+       this.drawPieceToElement(h1, this.holdPiece);
     }
   }
 
