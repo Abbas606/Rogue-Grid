@@ -41,8 +41,8 @@
   --board-height: 20;
   
   /* Calculated Sizes for Responsiveness */
-  --cell-size: clamp(14px, 4.5vh, 28px);
-  --preview-cell-size: clamp(10px, 3vh, 18px);
+  --cell-size: clamp(12px, 3.5vh, 26px);
+  --preview-cell-size: clamp(8px, 2vh, 14px);
 }
 
 /* Base Resets & Accessibility */
@@ -69,9 +69,11 @@ html, body {
   flex-direction: column;
   max-width: 500px; /* Centered for tablet/desktop view */
   margin: 0 auto;
-  height: 100%;
+  height: 100vh;
+  height: 100svh;
   padding: var(--space-2);
   gap: var(--space-2);
+  overflow: hidden;
 }
 
 /* Topbar & Stats */
@@ -142,10 +144,11 @@ html, body {
 #game-container {
   display: flex;
   flex: 1;
-  gap: var(--space-3);
+  gap: var(--space-2);
   justify-content: center;
   align-items: center;
-  min-height: 0; /* Critical for flex overflow */
+  min-height: 0;
+  overflow: hidden;
 }
 
 #board-wrap {
@@ -168,7 +171,7 @@ html, body {
 .cell {
   width: var(--cell-size);
   height: var(--cell-size);
-  background: rgba(255,255,255,0.02);
+  background: rgba(255,255,255,0.05);
   border-radius: 1px;
 }
 
@@ -176,25 +179,25 @@ html, body {
 #sidebar {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
-  width: 80px;
-  height: 100%;
+  gap: var(--space-2);
+  width: auto;
+  min-width: 70px;
 }
 
 .box {
   background: var(--bg-secondary);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  padding: var(--space-2);
+  padding: var(--space-1);
   text-align: center;
 }
 
 .box-title {
-  font-size: var(--font-xs);
+  font-size: 10px;
   color: var(--text-muted);
   text-transform: uppercase;
   font-weight: 700;
-  margin-bottom: var(--space-1);
+  margin-bottom: 2px;
 }
 
 .mini-grid {
@@ -208,7 +211,7 @@ html, body {
 .preview-cell {
   width: var(--preview-cell-size);
   height: var(--preview-cell-size);
-  background: rgba(255,255,255,0.02);
+  background: rgba(255,255,255,0.05);
 }
 
 /* Consumables List */
@@ -365,8 +368,12 @@ html, body {
 
 @media (max-height: 600px) {
   :root {
-    --cell-size: clamp(12px, 4vh, 20px);
-    --preview-cell-size: 10px;
+    --cell-size: clamp(10px, 3vh, 18px);
+    --preview-cell-size: 8px;
+    --space-2: 0.25rem;
+    --space-3: 0.5rem;
   }
-  .ctrl-btn { height: 44px; }
+  .ctrl-btn { height: 40px; font-size: var(--font-lg); }
+  .stat .label { font-size: 10px; }
+  .stat span:not(.label) { font-size: var(--font-sm); }
 }

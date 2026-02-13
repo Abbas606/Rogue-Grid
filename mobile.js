@@ -83,13 +83,15 @@ class Game {
 
   initBoard() {
     boardEl.innerHTML = '';
-    for (let i = 0; i < CORE.H * CORE.BASE_W; i++) {
+    // Ensure the board grid matches the CORE dimensions
+    const totalCells = CORE.H * CORE.BASE_W;
+    for (let i = 0; i < totalCells; i++) {
       const d = document.createElement("div");
       d.className = "cell";
       boardEl.appendChild(d);
     }
     
-    // Create preview and hold cells
+    // Create preview and hold cells (6x6 grids)
     [previewEl, holdEl].forEach(el => {
       if (!el) return;
       el.innerHTML = '';
@@ -129,10 +131,10 @@ class Game {
   }
 
   updateConsumables() {
-    byId("clear-row-count").textContent = this.tempUpgrades.clearRowCharges;
-    byId("clear-column-count").textContent = this.tempUpgrades.clearColumnCharges;
-    byId("clear-area-count").textContent = this.tempUpgrades.clearAreaCharges;
-    byId("gravity-charges").textContent = this.gravityCharges;
+    byId("clear-row-btn").textContent = `ROW (${this.tempUpgrades.clearRowCharges})`;
+    byId("clear-column-btn").textContent = `COL (${this.tempUpgrades.clearColumnCharges})`;
+    byId("clear-area-btn").textContent = `AREA (${this.tempUpgrades.clearAreaCharges})`;
+    byId("gravity-btn").textContent = `GRAV (${this.gravityCharges})`;
     
     byId("clear-row-btn").disabled = this.tempUpgrades.clearRowCharges <= 0;
     byId("clear-column-btn").disabled = this.tempUpgrades.clearColumnCharges <= 0;
