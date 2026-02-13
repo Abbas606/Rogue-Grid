@@ -23,6 +23,10 @@ const Piece = class extends CORE.Piece {
 const Renderer = class extends CORE.Renderer {
   constructor(board) {
     super(board, boardEl, PIECES);
+    this.refreshCells();
+  }
+  refreshCells() {
+    this.cells = Array.from(boardEl.children);
   }
   drawPreview(type) {
     super.drawPreview(type, previewEl);
@@ -90,6 +94,8 @@ class Game {
       d.className = "cell";
       boardEl.appendChild(d);
     }
+    
+    if (this.renderer) this.renderer.refreshCells();
     
     // Create preview and hold cells (6x6 grids)
     [previewEl, holdEl].forEach(el => {
@@ -283,8 +289,8 @@ class Game {
 
   rotate() {
     if (!this.active) return;
-    const oldRot = this.active.rotation;
-    this.active.rotation = (this.active.rotation + 1) % 4;
+    const oldRot = this.active.rot;
+    this.active.rot = (this.active.rot + 1) % 4;
     
     // Simple wall kick
     const kicks = [0, 1, -1, 2, -2];
@@ -298,7 +304,7 @@ class Game {
       this.active.x -= dx;
     }
     
-    if (!success) this.active.rotation = oldRot;
+    if (!success) this.active.rot = oldRot;
   }
 
   unlock() {
@@ -350,13 +356,12 @@ class Game {
   }
 
   applyUpgrade(upgrade) {
-    switch(upgrade.id) {
-        case 'clear_row': this.tempUpgrades.clearRowCharges++; break;
-        case 'clear_column': this.tempUpgrades.clearColumnCharges++; break;
-        case 'clear_area': this.tempUpgrades.clearAreaCharges++; break;
-        case 'speed_up': this.tempUpgrades.speedUpLevels++; break;
-        case 'gravity_cost_down': this.gravityCharges += 5; break;
-    }
+    if (upgrade.id === 'clear_row') this.tempUpgrades.clearRowCharges++;
+    if (upgrade.id === 'clear_column') this.tempUpgrades.clearColumnCharges++;
+    if (upgrade.id === 'clear_area') this.tempUpgrades.clearAreaCharges++;
+    if (upgrade.id === 'speed_up') this.tempUpgrades.speedUpLevels++;
+    if (upgrade.id === 'gravity_cost_down') this.gravityCharges += 5;
+    this.updateConsumables();
     this.updateStats();
   }
 
@@ -373,6 +378,7 @@ class Game {
         this.unlock();
       }
       this.updateStats();
+      this.updateConsumables();
     }
     this.spawn();
   }
