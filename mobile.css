@@ -1,0 +1,240 @@
+:root {
+  --bg: #0f172a;
+  --surface: #1e293b;
+  --primary: #38bdf8;
+  --danger: #ef4444;
+  --text: #f8fafc;
+  --muted: #94a3b8;
+  --border: 1px solid rgba(255,255,255,0.1);
+  --radius: 8px;
+  --cell-size: 7.5vw;
+  --preview-cell-size: 4.5vw;
+}
+
+* {
+  box-sizing: border-box;
+  touch-action: manipulation;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, sans-serif;
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 8px;
+  gap: 8px;
+}
+
+.topbar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.stats-row {
+  display: flex;
+  justify-content: space-between;
+  background: var(--surface);
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  font-size: 0.9rem;
+}
+
+.stat .label { color: var(--muted); }
+
+.actions-row {
+  display: flex;
+  gap: 8px;
+}
+
+.btn {
+  flex: 1;
+  padding: 10px;
+  border: none;
+  border-radius: var(--radius);
+  background: var(--primary);
+  color: #000;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.btn.danger { background: var(--danger); color: white; }
+
+#game-container {
+  display: flex;
+  flex: 1;
+  gap: 8px;
+  justify-content: center;
+  align-items: flex-start;
+  overflow: hidden;
+}
+
+#board-wrap {
+  position: relative;
+  background: rgba(0,0,0,0.3);
+  padding: 4px;
+  border-radius: 4px;
+  border: var(--border);
+}
+
+#board {
+  display: grid;
+  grid-template-columns: repeat(10, var(--cell-size));
+  grid-template-rows: repeat(20, var(--cell-size));
+  gap: 1px;
+}
+
+.cell {
+  width: var(--cell-size);
+  height: var(--cell-size);
+  background: rgba(255,255,255,0.03);
+  border-radius: 1px;
+}
+
+#sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100px;
+}
+
+.box {
+  background: var(--surface);
+  border: var(--border);
+  border-radius: var(--radius);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.box-title {
+  font-size: 0.7rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.mini-grid {
+  display: grid;
+  grid-template-columns: repeat(6, var(--preview-cell-size));
+  grid-template-rows: repeat(6, var(--preview-cell-size));
+  gap: 1px;
+}
+
+.preview-cell {
+  width: var(--preview-cell-size);
+  height: var(--preview-cell-size);
+  background: rgba(255,255,255,0.02);
+}
+
+.consumables-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 4px;
+  width: 100%;
+}
+
+.btn-sm {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: var(--text);
+  font-size: 0.7rem;
+  padding: 6px;
+  border-radius: 4px;
+}
+
+.btn-sm:disabled { opacity: 0.3; }
+
+#controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 12px;
+}
+
+.control-row {
+  display: flex;
+  gap: 8px;
+}
+
+.ctrl-btn {
+  flex: 1;
+  height: 60px;
+  border: none;
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 0 rgba(0,0,0,0.3);
+}
+
+.ctrl-btn:active {
+  transform: translateY(2px);
+  box-shadow: 0 2px 0 rgba(0,0,0,0.3);
+}
+
+.ctrl-btn.primary { background: var(--primary); color: #000; }
+.ctrl-btn.secondary { font-size: 1rem; }
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.95);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s;
+}
+
+.overlay[aria-hidden="false"] {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.overlay-inner {
+  background: var(--surface);
+  padding: 24px;
+  border-radius: 16px;
+  text-align: center;
+  width: 85%;
+  max-width: 320px;
+}
+
+.unlock-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  margin: 16px 0;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.unlock-card {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  padding: 12px;
+  border-radius: 8px;
+}
+
+#particles {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}

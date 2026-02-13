@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Rogue Grid Mobile</title>
+  <link rel="stylesheet" href="mobile.css">
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div class="stats-row">
+        <div class="stat"><span class="label">Score:</span> <span id="score">0</span></div>
+        <div class="stat"><span class="label">Level:</span> <span id="level">1</span></div>
+        <div class="stat"><span class="label">Lines:</span> <span id="lines">0</span></div>
+      </div>
+      <div class="actions-row">
+        <button id="start-pause-btn" class="btn">Start</button>
+        <button id="top-restart-btn" class="btn danger" style="display:none">Reset</button>
+      </div>
+    </header>
+
+    <main id="game-container">
+      <div id="board-wrap">
+        <div id="board"></div>
+        <canvas id="particles"></canvas>
+        <div id="combo-visual"></div>
+      </div>
+      
+      <aside id="sidebar">
+        <div class="preview-hold">
+          <div class="box">
+            <div class="box-title">Next</div>
+            <div id="preview" class="mini-grid"></div>
+          </div>
+          <div class="box">
+            <div class="box-title">Hold</div>
+            <div id="hold" class="mini-grid"></div>
+          </div>
+        </div>
+        
+        <div id="objectives" class="box" style="display:none">
+          <div class="box-title">Objectives</div>
+          <div id="obj-lines" class="obj-item"></div>
+          <div id="obj-obstacles" class="obj-item"></div>
+          <div id="obj-score" class="obj-item"></div>
+        </div>
+
+        <div id="consumables" class="box">
+          <div class="consumables-grid">
+            <button id="clear-row-btn" class="btn-sm">Row (<span id="clear-row-count">0</span>)</button>
+            <button id="clear-column-btn" class="btn-sm">Col (<span id="clear-column-count">0</span>)</button>
+            <button id="clear-area-btn" class="btn-sm">Area (<span id="clear-area-count">0</span>)</button>
+            <button id="gravity-btn" class="btn-sm">Grav (<span id="gravity-charges">0</span>)</button>
+          </div>
+        </div>
+      </aside>
+    </main>
+
+    <nav id="controls">
+      <div class="control-row">
+        <button id="btn-left" class="ctrl-btn">←</button>
+        <button id="btn-rotate" class="ctrl-btn rotate">↻</button>
+        <button id="btn-right" class="ctrl-btn">→</button>
+      </div>
+      <div class="control-row">
+        <button id="btn-hold" class="ctrl-btn secondary">Hold</button>
+        <button id="btn-soft" class="ctrl-btn">↓</button>
+        <button id="btn-hard" class="ctrl-btn primary">Hard Drop</button>
+      </div>
+    </nav>
+
+    <div id="overlay" class="overlay" aria-hidden="true">
+      <div class="overlay-inner">
+        <h2 id="overlay-title">Game Over</h2>
+        <div id="summary"></div>
+        <button id="restart-btn" class="btn primary">Restart</button>
+        <div id="gameover-unlocks" style="display:none">
+          <p>Choose a permanent piece:</p>
+          <div id="gameover-unlock-options" class="unlock-grid"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="unlock-overlay" class="overlay" aria-hidden="true">
+      <div class="overlay-inner">
+        <h2>Level Up!</h2>
+        <p>Choose an upgrade:</p>
+        <div id="unlock-options" class="unlock-grid"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="pieces.js"></script>
+  <script src="core.js"></script>
+  <script src="mobile.js"></script>
+</body>
+</html>
