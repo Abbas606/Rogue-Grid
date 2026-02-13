@@ -600,30 +600,61 @@ select {
 }
 
 #touchpad {
-  margin-top: 24px;
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  grid-template-rows: 60px 80px;
-  grid-template-areas:
-    "left rotate right"
-    "drop drop drop";
-  gap: 8px;
-  width: 100%;
-  max-width: 400px;
+  display: none;
 }
-.zone {
-  background: rgba(255,255,255,0.05);
-  border: var(--border);
-  border-radius: 8px;
-}
-.zone.left { grid-area: left; }
-.zone.rotate { grid-area: rotate; }
-.zone.right { grid-area: right; }
-.zone.drop { grid-area: drop; }
-.zone.hold { display: none; } /* Handled via on-screen button usually or hidden */
 
-@media (min-width: 768px) {
-  #touchpad { display: none; }
+@media (max-width: 767px) {
+  #scale-root {
+    flex-direction: column;
+    align-items: center;
+    padding: 12px;
+    gap: 16px;
+    overflow-y: auto;
+    height: auto;
+  }
+
+  #game {
+    grid-template-columns: 1fr;
+    grid-template-areas: 
+      "stats"
+      "board";
+    gap: 16px;
+  }
+
+  #controls-settings {
+    display: none; /* Hide settings on mobile */
+  }
+
+  #sidebar {
+    width: 100%;
+    max-width: 400px;
+  }
+
+  #preview-hold-row {
+    width: 100%;
+    flex-direction: row; /* Match desktop: horizontal Next and Hold side-by-side */
+    flex-wrap: nowrap;
+    justify-content: space-between;
+  }
+
+  #preview-wrap, #hold-wrap {
+    flex: 1;
+    min-width: 0; /* Allow shrinking */
+  }
+
+  #board-wrap {
+    width: 100%;
+    max-width: 320px;
+    margin: 0 auto;
+  }
+
+  #touchpad {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 5;
+    pointer-events: auto;
+  }
 }
 
 /* Button Colors and Styles */

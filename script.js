@@ -367,21 +367,22 @@ class Renderer {
     this.prevActiveIdx = [];
     this.prevGhostIdx = [];
   }
-  idx(r, c) { return r * W + c; }
+  idx(r, c) { return r * this.board.w + c; }
   validGhost(piece, dx, dy, rot = piece.rot, x = piece.x, y = piece.y) {
     for (const [bx,by] of piece.blocks(rot, x, y)) {
       const r = y + by + dy;
       const c = x + bx + dx;
-      if (c < 0 || c >= W || r >= H) return false;
+      if (c < 0 || c >= this.board.w || r >= H) return false;
       if (r >= 0 && this.board.get(r, c)) return false;
     }
     return true;
   }
   drawBoard() {
     for (let r = 0; r < H; r++) {
-      for (let c = 0; c < W; c++) {
+      for (let c = 0; c < this.board.w; c++) {
         const v = this.board.grid[r][c];
         const el = this.cells[this.idx(r,c)];
+        if (!el) continue;
         el.className = 'cell';
         el.style.opacity = '';
         if (v) {
@@ -399,8 +400,10 @@ class Renderer {
   }
   drawGhost(piece) {
     for (const i of this.prevGhostIdx) {
-      this.cells[i].style.opacity = '';
-      this.cells[i].classList.remove("ghost");
+      if (this.cells[i]) {
+        this.cells[i].style.opacity = '';
+        this.cells[i].classList.remove("ghost");
+      }
     }
     this.prevGhostIdx.length = 0;
     if (!piece) return;
@@ -411,52 +414,58 @@ class Renderer {
     const color = PIECES[piece.type].color;
     for (const [dx,dy] of piece.blocks(piece.rot, piece.x, gy)) {
       const r = gy + dy, c = piece.x + dx;
-      if (r >= 0 && r < H && c >= 0 && c < W) {
+      if (r >= 0 && r < H && c >= 0 && c < this.board.w) {
         if (!this.board.grid[r][c]) {
           const i = this.idx(r,c);
-          this.cells[i].style.backgroundColor = color;
-          this.cells[i].style.opacity = '0.28';
-          this.cells[i].classList.add("ghost");
-          this.prevGhostIdx.push(i);
+          if (this.cells[i]) {
+            this.cells[i].style.backgroundColor = color;
+            this.cells[i].style.opacity = '0.28';
+            this.cells[i].classList.add("ghost");
+            this.prevGhostIdx.push(i);
+          }
         }
       }
     }
   }
   drawActive(piece) {
     for (const i of this.prevActiveIdx) {
-      this.cells[i].classList.remove("active");
+      if (this.cells[i]) this.cells[i].classList.remove("active");
     }
     this.prevActiveIdx.length = 0;
     const color = PIECES[piece.type].color;
     for (const [dx,dy] of piece.blocks()) {
       const r = piece.y + dy, c = piece.x + dx;
-      if (r >= 0 && r < H && c >= 0 && c < W) {
+      if (r >= 0 && r < H && c >= 0 && c < this.board.w) {
         const i = this.idx(r,c);
-        this.cells[i].classList.add("active");
-        this.cells[i].style.backgroundColor = color;
-        this.prevActiveIdx.push(i);
+        if (this.cells[i]) {
+          this.cells[i].classList.add("active");
+          this.cells[i].style.backgroundColor = color;
+          this.prevActiveIdx.push(i);
+        }
       }
     }
   }
   clearAllTemporaryElements() {
     // Clear all temporary visual elements including ghost pieces
     for (const i of this.prevGhostIdx) {
-      this.cells[i].style.opacity = '';
-      this.cells[i].classList.remove("ghost");
+      if (this.cells[i]) {
+        this.cells[i].style.opacity = '';
+        this.cells[i].classList.remove("ghost");
+      }
     }
     this.prevGhostIdx.length = 0;
     
     for (const i of this.prevActiveIdx) {
-      this.cells[i].classList.remove("active");
+      if (this.cells[i]) this.cells[i].classList.remove("active");
     }
     this.prevActiveIdx.length = 0;
     
     // Clear any other temporary styling
     for (let r = 0; r < H; r++) {
-      for (let c = 0; c < W; c++) {
+      for (let c = 0; c < this.board.w; c++) {
         const i = this.idx(r, c);
         const el = this.cells[i];
-        if (!el.classList.contains('cell')) {
+        if (el && !el.classList.contains('cell')) {
           el.className = 'cell';
         }
       }
@@ -667,7 +676,13 @@ class Game {
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
     } catch(e) {}
-    return [...STANDARD_PIECES];
+    // If no saved pool, generate a completely random 10-piece pool
+    const allPieces = Object.keys(PIECES);
+    const shuffled = bagRandom(allPieces);
+    const initialPool = shuffled.slice(0, 10);
+    this.permanentPool = initialPool;
+    this.savePool();
+    return initialPool;
   }
 
   savePool() {
@@ -1249,50 +1264,58 @@ class Game {
       });
     }
     const touchpad = byId("touchpad");
-    const zoneAction = (el) => el?.dataset?.action;
+    if (!touchpad) return;
+
     let swipeStart = null;
+    let lastTapTime = 0;
+    const holdEl = byId("hold");
+
     const onPointerDown = (e) => {
       if (this.state !== "playing") return;
-      swipeStart = { x: e.clientX, y: e.clientY, t: performance.now(), el: e.target };
-      const z = zoneAction(e.target);
-      if (z === "left") this.move(-1,0);
-      else if (z === "right") this.move(1,0);
-      else if (z === "rotate") this.rotate(1);
-      else if (z === "soft-drop") this.softDropping = true;
+      // If tapping Hold element
+      const holdWrap = byId("hold-wrap");
+      if (holdWrap && (e.target === holdWrap || holdWrap.contains(e.target))) {
+        this.hold();
+        return;
+      }
+      swipeStart = { x: e.clientX, y: e.clientY, t: performance.now() };
     };
+
     const onPointerUp = (e) => {
       if (!swipeStart) return;
       const dx = e.clientX - swipeStart.x;
       const dy = e.clientY - swipeStart.y;
       const magX = Math.abs(dx), magY = Math.abs(dy);
-      if (!zoneAction(swipeStart.el)) {
-        if (magX > magY && magX > 24) {
-          if (dx > 0) this.move(1,0); else this.move(-1,0);
-        } else if (magY > 28) {
-          if (dy > 0) this.softDropping = true; else this.rotate(1);
-        } else {
-          this.rotate(1);
-        }
+      const dt = performance.now() - swipeStart.t;
+
+      if (dt < 200 && magX < 20 && magY < 20) {
+        // Simple tap -> Handled by hold check in Down, or potentially other taps
+      } else if (magX > magY && magX > 30) {
+        // Horizontal Swipe: Left/Right move
+        if (dx > 0) this.move(1, 0); else this.move(-1, 0);
+      } else if (magY > magX && magY > 30) {
+        // Vertical Swipe: Up (Rotate) or Down (Hard Drop)
+        if (dy < 0) this.rotate(1); // Swipe Up -> Rotate
+        else this.hardDrop(); // Swipe Down -> Drop (Hard Drop as requested)
       }
-      this.softDropping = false;
+      
       swipeStart = null;
     };
+
     touchpad.addEventListener("pointerdown", onPointerDown);
     touchpad.addEventListener("pointerup", onPointerUp);
     touchpad.addEventListener("pointerleave", () => { this.softDropping = false; swipeStart = null; });
-    if (!window.PointerEvent) {
-      const touchStart = (e) => {
-        const t = e.changedTouches[0];
-        onPointerDown({ clientX: t.clientX, clientY: t.clientY, target: e.target });
-      };
-      const touchEnd = (e) => {
-        const t = e.changedTouches[0];
-        onPointerUp({ clientX: t.clientX, clientY: t.clientY, target: e.target });
-      };
-      touchpad.addEventListener("touchstart", touchStart, { passive: true });
-      touchpad.addEventListener("touchend", touchEnd, { passive: true });
-      touchpad.addEventListener("touchcancel", () => { this.softDropping = false; swipeStart = null; }, { passive: true });
-    }
+    
+    // Explicitly handle touch for better mobile response
+    touchpad.addEventListener("touchstart", (e) => {
+      const t = e.changedTouches[0];
+      onPointerDown({ clientX: t.clientX, clientY: t.clientY, target: e.target });
+    }, { passive: true });
+    
+    touchpad.addEventListener("touchend", (e) => {
+      const t = e.changedTouches[0];
+      onPointerUp({ clientX: t.clientX, clientY: t.clientY, target: e.target });
+    }, { passive: true });
   }
   generateUnlockOptions(count = 3) {
     const available = Object.keys(PIECES).filter(p => !this.currentPool.includes(p));
