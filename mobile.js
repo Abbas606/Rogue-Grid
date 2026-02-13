@@ -8,10 +8,10 @@ const holdEl = byId("hold");
 const scoreEl = byId("score");
 const linesEl = byId("lines");
 const levelEl = byId("level");
-const startPauseBtn = byId("start-pause-btn");
-const topRestartBtn = byId("top-restart-btn");
-const overlayEl = byId("overlay");
+const startBtn = byId("start-btn");
 const restartBtn = byId("restart-btn");
+const overlayEl = byId("overlay");
+const overlayRestartBtn = byId("overlay-restart");
 
 const Board = CORE.Board;
 const Piece = class extends CORE.Piece {
@@ -124,6 +124,8 @@ class Game {
     this.renderer.drawPreview(null);
     this.renderer.drawHold(null);
     byId("gameover-unlocks").style.display = "none";
+    startBtn.style.display = "inline-flex";
+    restartBtn.style.display = "none";
   }
 
   updateConsumables() {
@@ -175,18 +177,16 @@ class Game {
   }
 
   start() {
-    if (this.state === "playing") return;
     this.state = "playing";
-    this.spawn();
+    startBtn.style.display = "none";
+    restartBtn.style.display = "inline-flex";
+    if (!this.active) this.spawn();
     this.lastTime = performance.now();
     requestAnimationFrame(this.loop);
-    startPauseBtn.textContent = "Pause";
-    topRestartBtn.style.display = "block";
   }
 
   pause() {
     this.isPaused = !this.isPaused;
-    startPauseBtn.textContent = this.isPaused ? "Resume" : "Pause";
   }
 
   spawn() {
@@ -400,41 +400,38 @@ class Game {
   }
 
   bindControls() {
-    byId("btn-left").onclick = () => this.move(-1, 0);
-    byId("btn-right").onclick = () => this.move(1, 0);
-    byId("btn-rotate").onclick = () => this.rotate();
-    byId("btn-soft").onclick = () => this.move(0, 1);
-    byId("btn-hard").onclick = () => {
-      while(this.move(0, 1));
-    };
-    byId("btn-hold").onclick = () => this.hold();
+    // UI Buttons
+    startBtn.onclick = () => this.start();
     
+    restartBtn.onclick = () => {
+        if (confirm("Restart game?")) {
+            this.reset();
+            this.state = "ready";
+        }
+    };
+
+    overlayRestartBtn.onclick = () => {
+      overlayEl.setAttribute("aria-hidden", "true");
+      this.reset();
+      this.start();
+    };
+
+    // Touch Controls
+    byId("btn-left").ontouchstart = (e) => { e.preventDefault(); this.move(-1, 0); };
+    byId("btn-right").ontouchstart = (e) => { e.preventDefault(); this.move(1, 0); };
+    byId("btn-up").ontouchstart = (e) => { e.preventDefault(); this.rotate(); };
+    byId("btn-down").ontouchstart = (e) => { e.preventDefault(); this.move(0, 1); };
+    byId("btn-drop").ontouchstart = (e) => {
+      e.preventDefault();
+      this.hardDrop();
+    };
+    byId("btn-hold").ontouchstart = (e) => { e.preventDefault(); this.hold(); };
+    
+    // Consumables
     byId("clear-row-btn").onclick = () => this.useClearRow();
     byId("clear-column-btn").onclick = () => this.useClearColumn();
     byId("clear-area-btn").onclick = () => this.useClearArea();
     byId("gravity-btn").onclick = () => this.useGravity();
-
-    startPauseBtn.onclick = () => {
-      if (this.state === "ready") this.start();
-      else this.pause();
-    };
-    
-    topRestartBtn.onclick = () => {
-        if (confirm("Restart game?")) {
-            this.reset();
-            this.state = "ready";
-            startPauseBtn.textContent = "Start";
-            topRestartBtn.style.display = "none";
-        }
-    };
-
-    restartBtn.onclick = () => {
-      overlayEl.setAttribute("aria-hidden", "true");
-      this.reset();
-      this.state = "playing";
-      this.lastTime = performance.now();
-      requestAnimationFrame(this.loop);
-    };
   }
 }
 
