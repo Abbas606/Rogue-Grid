@@ -1,17 +1,27 @@
 "use strict";
 
-const BASE_W = CORE.BASE_W;
+const BASE_W = 10;
 let W = BASE_W;
-const H = CORE.H;
+const H = 20;
 const MAX_EXTRA_BOARD_COLS = 5;
-const LOCK_DELAY_MS = CORE.LOCK_DELAY_MS;
-const BASE_GRAVITY_MS = CORE.BASE_GRAVITY_MS;
+const LOCK_DELAY_MS = 500;
+const BASE_GRAVITY_MS = 1000;
 const SOFT_DROP_MS = 40;
 
-const SPEEDUP_BASE_INCREMENT = CORE.SPEEDUP_BASE_INCREMENT;
-const SPEEDUP_RANDOM_RANGE = CORE.SPEEDUP_RANDOM_RANGE;
-const SPEEDUP_MIN_MS = CORE.SPEEDUP_MIN_MS;
-const computeGravity = CORE.computeGravity;
+const SPEEDUP_BASE_INCREMENT = 1;
+const SPEEDUP_RANDOM_RANGE = 0.25;
+const SPEEDUP_MIN_MS = 120;
+const computeGravity = (level, speedUpLevels) => {
+  const base = BASE_GRAVITY_MS;
+  const lv = Math.max(1, level | 0);
+  const su = Math.max(0, speedUpLevels || 0);
+  const levelFactor = Math.pow(0.9, lv - 1);
+  const upgradeBase = 0.85;
+  const upgradeFactor = Math.pow(upgradeBase, su);
+  const ms = base * levelFactor * upgradeFactor;
+  const clamped = Math.max(SPEEDUP_MIN_MS, Math.floor(ms));
+  return clamped;
+};
 
 const byId = (id) => document.getElementById(id);
 const boardEl = byId("board");
@@ -155,32 +165,340 @@ const clearWarningBanner = () => {
 };
 
 
-const SRS_JLSTZ_RIGHT = CORE.SRS_JLSTZ_RIGHT;
-const SRS_JLSTZ_LEFT = CORE.SRS_JLSTZ_LEFT;
-const SRS_I_RIGHT = CORE.SRS_I_RIGHT;
-const SRS_I_LEFT = CORE.SRS_I_LEFT;
+const SRS_JLSTZ_RIGHT = {
+  "0>1": [[0,0],[-1,0],[-1,1],[0,-2],[-1,-2]],
+  "1>2": [[0,0],[1,0],[1,-1],[0,2],[1,2]],
+  "2>3": [[0,0],[1,0],[1,1],[0,-2],[1,-2]],
+  "3>0": [[0,0],[-1,0],[-1,-1],[0,2],[-1,2]],
+};
+const SRS_JLSTZ_LEFT = {
+  "0>3": [[0,0],[1,0],[1,1],[0,-2],[1,-2]],
+  "3>2": [[0,0],[-1,0],[-1,-1],[0,2],[-1,2]],
+  "2>1": [[0,0],[-1,0],[-1,1],[0,-2],[-1,-2]],
+  "1>0": [[0,0],[1,0],[1,-1],[0,2],[1,2]],
+};
+const SRS_I_RIGHT = {
+  "0>1": [[0,0],[-2,0],[1,0],[-2,-1],[1,2]],
+  "1>2": [[0,0],[-1,0],[2,0],[-1,2],[2,-1]],
+  "2>3": [[0,0],[2,0],[-1,0],[2,1],[-1,-2]],
+  "3>0": [[0,0],[1,0],[-2,0],[1,-2],[-2,1]],
+};
+const SRS_I_LEFT = {
+  "0>3": [[0,0],[-1,0],[2,0],[-1,2],[2,-1]],
+  "3>2": [[0,0],[2,0],[-1,0],[2,1],[-1,-2]],
+  "2>1": [[0,0],[1,0],[-2,0],[1,-2],[-2,1]],
+  "1>0": [[0,0],[-2,0],[1,0],[-2,-1],[1,2]],
+};
 
 const STANDARD_PIECES = ['I', 'O', 'T', 'L', 'J', 'S', 'Z'];
 
-const UPGRADE_DEFS = CORE.UPGRADE_DEFS;
-const pickWeighted = CORE.pickWeighted;
-const bagRandom = (source) => CORE.bagRandom(source, PIECES);
-
-const Board = CORE.Board;
-const Piece = class extends CORE.Piece {
-  constructor(type) {
-    super(type, PIECES);
+const UPGRADE_DEFS = [
+  { id: 'speed_up', name: 'Speed Up', type: 'temp', weight: 3, icon: '⚡', desc: 'Increase core speed up rate each level' },
+  { id: 'extra_reroll', name: 'Extra Re-roll', type: 'temp', weight: 2, icon: '🎲', desc: '+1 reroll next choice' },
+  { id: 'second_chance', name: 'Second Chance', type: 'temp', weight: 1, icon: '❤️', desc: 'Survive game over once' },
+  { id: 'score_mult', name: 'Score Multiplier', type: 'temp', weight: 2, icon: '✖', desc: 'Double score for a few clears' },
+  { id: 'clear_row', name: 'Clear Row', type: 'temp', weight: 1, icon: '➖', desc: 'Gain a consumable that clears a random row' },
+  { id: 'clear_column', name: 'Clear Column', type: 'temp', weight: 1, icon: '➕', desc: 'Gain a consumable that clears a random column' },
+  { id: 'clear_area', name: 'Clear Area', type: 'temp', weight: 1, icon: '⛰', desc: 'Gain a consumable that clears a 3x3 area' },
+  { id: 'expanded_preview', name: '+1 Next', type: 'perm', weight: 2, icon: '🔭', desc: 'Show +1 next piece (stackable)' },
+  { id: 'expand_board', name: '+1 Board', type: 'perm', weight: 1, icon: '⬌', desc: 'Add one column to the board (max +5)' },
+  { id: 'piece_removal', name: 'Remove Piece', type: 'perm', weight: 2, icon: '🗑️', desc: 'Remove a piece type' },
+  { id: 'obstacle_mode', name: 'Obstacle Focus', type: 'perm', weight: 1, icon: '🧱', desc: 'Stronger obstacles that give more points' },
+  { id: 'gravity_cost_down', name: 'Gravity Opt', type: 'perm', weight: 2, icon: '📉', desc: 'Reduces Gravity power-up cost by 1' },
+];
+const pickWeighted = (items, count) => {
+  const pool = [];
+  items.forEach(it => { for (let i = 0; i < it.weight; i++) pool.push(it); });
+  const res = [];
+  const used = new Set();
+  while (res.length < count && pool.length) {
+    const idx = Math.floor(Math.random() * pool.length);
+    const cand = pool[idx];
+    if (!used.has(cand.id)) { res.push(cand); used.add(cand.id); }
+    pool.splice(idx, 1);
   }
+  return res;
 };
-const Renderer = class extends CORE.Renderer {
-  constructor(board) {
-    super(board, boardEl, PIECES);
+const bagRandom = (source) => {
+  const pool = [...(source || Object.keys(PIECES))];
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
   }
+  return pool;
+};
+
+class Board {
+  constructor(w, h) {
+    this.w = w; this.h = h;
+    this.grid = Array.from({ length: h }, () => Array(w).fill(0));
+  }
+  isObstacleCell(v) {
+    return typeof v === 'string' && v.startsWith('OB');
+  }
+  get(r, c) {
+    if (r < 0 || r >= this.h || c < 0 || c >= this.w) return null;
+    return this.grid[r][c];
+  }
+  set(r, c, v) {
+    if (r < 0 || r >= this.h || c < 0 || c >= this.w) return;
+    this.grid[r][c] = v;
+  }
+  mergePiece(piece) {
+    for (const [dx, dy] of piece.blocks()) {
+      const r = piece.y + dy, c = piece.x + dx;
+      if (r >= 0) this.set(r, c, piece.type);
+    }
+  }
+  clearLines() {
+    const cleared = [];
+    const clearedHadObstacles = [];
+    for (let r = this.h - 1; r >= 0; r--) {
+      if (this.grid[r].every(v => v)) {
+        const hadOb = this.grid[r].some(v => this.isObstacleCell(v));
+        cleared.push(r);
+        clearedHadObstacles.push(hadOb);
+        for (let c = 0; c < this.w; c++) {
+          this.grid[r][c] = 0;
+        }
+      }
+    }
+    if (cleared.length > 0) {
+      // this.applyGravity(); // Gravity is now a manual power-up
+    }
+    this.lastClearedHadObstacles = clearedHadObstacles;
+    return cleared;
+  }
+  applyGravity() {
+    for (let c = 0; c < this.w; c++) {
+      // Process each column independently
+      // We will iterate from bottom to top
+      // writePtr tracks where the next falling block should land
+      let writePtr = this.h - 1;
+      
+      for (let readPtr = this.h - 1; readPtr >= 0; readPtr--) {
+        const val = this.grid[readPtr][c];
+        
+        // If it's an obstacle, it's static/fixed in place.
+        // It acts as a floor for any blocks above it.
+        // So, we must reset the writePtr to be immediately above this obstacle.
+        if (this.isObstacleCell(val)) {
+          // If the obstacle is at readPtr, but writePtr was lower (meaning there were gaps below),
+          // we can't move the obstacle down. It stays at readPtr.
+          // Any subsequent blocks must stack on top of this obstacle.
+          writePtr = readPtr - 1; 
+          continue;
+        }
+
+        // If it's a regular piece block (non-zero, non-obstacle)
+        if (val !== 0) {
+          // If we have a gap to fill (writePtr > readPtr)
+          if (writePtr > readPtr) {
+            this.grid[writePtr][c] = val;
+            this.grid[readPtr][c] = 0;
+          }
+          // Move the write pointer up one slot
+          writePtr--;
+        }
+      }
+    }
+  }
+  addObstacleRowPattern(pattern) {
+    const topRow = this.grid[0];
+    const hasBlocksInTop = topRow.some(v => v && !this.isObstacleCell(v));
+    if (hasBlocksInTop) {
+      for (let c = 0; c < this.w; c++) {
+        if (!this.isObstacleCell(topRow[c])) {
+          topRow[c] = topRow[c];
+        }
+      }
+    }
+    this.grid.shift();
+    const row = Array(this.w).fill(0);
+    for (let c = 0; c < this.w; c++) {
+      if (pattern && pattern[c]) {
+        let lvl = pattern[c];
+        if (!Number.isFinite(lvl)) lvl = 2;
+        lvl = Math.max(2, Math.floor(lvl));
+        row[c] = 'OB' + lvl;
+      }
+    }
+    this.grid.push(row);
+  }
+  addObstacleRow() {
+    const topRow = this.grid[0];
+    const hasBlocksInTop = topRow.some(v => v && !this.isObstacleCell(v));
+    if (hasBlocksInTop) {
+      for (let c = 0; c < this.w; c++) {
+        if (!this.isObstacleCell(topRow[c])) {
+          topRow[c] = topRow[c];
+        }
+      }
+    }
+    this.grid.shift();
+    this.grid.push(Array(this.w).fill('OB2'));
+  }
+}
+
+class Piece {
+  constructor(type) {
+    this.type = type;
+    this.rot = 0;
+    this.x = 3;
+    this.y = -2;
+    const def = PIECES[this.type];
+    this.cx = def.center ? def.center[0] : Math.floor(def.shape[0].length / 2);
+    this.cy = def.center ? def.center[1] : Math.floor(def.shape.length / 2);
+  }
+  shape() { return PIECES[this.type].shape; }
+  blocks(rot = this.rot, x = this.x, y = this.y) {
+    let shape = this.shape();
+    for (let i = 0; i < rot; i++) {
+      shape = shape[0].map((_, colIndex) => shape.map(row => row[colIndex]).reverse());
+    }
+    return shape.map((row, r) => row.map((val, c) => val ? [c, r] : null)).flat().filter(Boolean);
+  }
+}
+
+class Renderer {
+  constructor(board) {
+    this.board = board;
+    this.cells = Array.from(boardEl.children);
+    this.prevActiveIdx = [];
+    this.prevGhostIdx = [];
+  }
+  idx(r, c) { return r * W + c; }
+  validGhost(piece, dx, dy, rot = piece.rot, x = piece.x, y = piece.y) {
+    for (const [bx,by] of piece.blocks(rot, x, y)) {
+      const r = y + by + dy;
+      const c = x + bx + dx;
+      if (c < 0 || c >= W || r >= H) return false;
+      if (r >= 0 && this.board.get(r, c)) return false;
+    }
+    return true;
+  }
+  drawBoard() {
+    for (let r = 0; r < H; r++) {
+      for (let c = 0; c < W; c++) {
+        const v = this.board.grid[r][c];
+        const el = this.cells[this.idx(r,c)];
+        el.className = 'cell';
+        el.style.opacity = '';
+        if (v) {
+          if (v === 'OB2' || v === 'OB1') {
+            el.classList.add('obstacle-cell');
+            el.style.backgroundColor = v === 'OB2' ? '#6b7280' : '#9ca3af';
+          } else {
+            el.style.backgroundColor = PIECES[v].color;
+          }
+        } else {
+          el.style.backgroundColor = '';
+        }
+      }
+    }
+  }
+  drawGhost(piece) {
+    for (const i of this.prevGhostIdx) {
+      this.cells[i].style.opacity = '';
+      this.cells[i].classList.remove("ghost");
+    }
+    this.prevGhostIdx.length = 0;
+    if (!piece) return;
+    let gy = piece.y;
+    while (this.validGhost(piece, 0, 1, piece.rot, piece.x, gy)) {
+      gy++;
+    }
+    const color = PIECES[piece.type].color;
+    for (const [dx,dy] of piece.blocks(piece.rot, piece.x, gy)) {
+      const r = gy + dy, c = piece.x + dx;
+      if (r >= 0 && r < H && c >= 0 && c < W) {
+        if (!this.board.grid[r][c]) {
+          const i = this.idx(r,c);
+          this.cells[i].style.backgroundColor = color;
+          this.cells[i].style.opacity = '0.28';
+          this.cells[i].classList.add("ghost");
+          this.prevGhostIdx.push(i);
+        }
+      }
+    }
+  }
+  drawActive(piece) {
+    for (const i of this.prevActiveIdx) {
+      this.cells[i].classList.remove("active");
+    }
+    this.prevActiveIdx.length = 0;
+    const color = PIECES[piece.type].color;
+    for (const [dx,dy] of piece.blocks()) {
+      const r = piece.y + dy, c = piece.x + dx;
+      if (r >= 0 && r < H && c >= 0 && c < W) {
+        const i = this.idx(r,c);
+        this.cells[i].classList.add("active");
+        this.cells[i].style.backgroundColor = color;
+        this.prevActiveIdx.push(i);
+      }
+    }
+  }
+  clearAllTemporaryElements() {
+    // Clear all temporary visual elements including ghost pieces
+    for (const i of this.prevGhostIdx) {
+      this.cells[i].style.opacity = '';
+      this.cells[i].classList.remove("ghost");
+    }
+    this.prevGhostIdx.length = 0;
+    
+    for (const i of this.prevActiveIdx) {
+      this.cells[i].classList.remove("active");
+    }
+    this.prevActiveIdx.length = 0;
+    
+    // Clear any other temporary styling
+    for (let r = 0; r < H; r++) {
+      for (let c = 0; c < W; c++) {
+        const i = this.idx(r, c);
+        const el = this.cells[i];
+        if (!el.classList.contains('cell')) {
+          el.className = 'cell';
+        }
+      }
+    }
+  }
+
   drawPreview(type) {
-    super.drawPreview(type, previewEl);
+    const cells = Array.from(previewEl.children);
+    for (const c of cells) {
+      c.style.backgroundColor = '';
+    }
+    if (!type) {
+      previewEl.style.opacity = "0";
+      previewEl.getBoundingClientRect();
+      previewEl.style.transition = "opacity 200ms ease";
+      previewEl.style.opacity = "1";
+      return;
+    }
+    const piece = new Piece(type);
+    const shape = piece.shape();
+    const color = PIECES[type].color;
+    const w = shape[0].length;
+    const h = shape.length;
+    const startX = Math.floor((6 - w) / 2);
+    const startY = Math.floor((6 - h) / 2);
+    for (let r = 0; r < h; r++) {
+      for (let c = 0; c < w; c++) {
+        if (shape[r][c]) {
+          const idx = (startY + r) * 6 + (startX + c);
+          cells[idx].style.backgroundColor = color;
+        }
+      }
+    }
+    previewEl.style.opacity = "0";
+    previewEl.getBoundingClientRect();
+    previewEl.style.transition = "opacity 200ms ease";
+    previewEl.style.opacity = "1";
     if (previewWrap) { previewWrap.classList.add("active"); setTimeout(()=>previewWrap.classList.remove("active"), 220); }
   }
-};
+
+  // drawHold removed as it is no longer used
+}
 
 const tweenNumber = (el, to, dur = 400) => {
   const from = parseInt(el.textContent || "0", 10);
@@ -346,19 +664,10 @@ class Game {
       if (saved) {
         const parsed = JSON.parse(saved);
         // Validate
-        if (Array.isArray(parsed) && parsed.length >= 10) {
-          return parsed;
-        }
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
     } catch(e) {}
-    // If no saved pool or it's too small (like the old 7-piece set), 
-    // generate a completely random 10-piece pool
-    const allPieces = Object.keys(PIECES);
-    const shuffled = bagRandom(allPieces);
-    const initialPool = shuffled.slice(0, 10);
-    this.permanentPool = initialPool;
-    this.savePool();
-    return initialPool;
+    return [...STANDARD_PIECES];
   }
 
   savePool() {
@@ -940,58 +1249,50 @@ class Game {
       });
     }
     const touchpad = byId("touchpad");
-    if (!touchpad) return;
-
+    const zoneAction = (el) => el?.dataset?.action;
     let swipeStart = null;
-    let lastTapTime = 0;
-    const holdEl = byId("hold");
-
     const onPointerDown = (e) => {
       if (this.state !== "playing") return;
-      // If tapping Hold element
-      const holdWrap = byId("hold-wrap");
-      if (holdWrap && (e.target === holdWrap || holdWrap.contains(e.target))) {
-        this.hold();
-        return;
-      }
-      swipeStart = { x: e.clientX, y: e.clientY, t: performance.now() };
+      swipeStart = { x: e.clientX, y: e.clientY, t: performance.now(), el: e.target };
+      const z = zoneAction(e.target);
+      if (z === "left") this.move(-1,0);
+      else if (z === "right") this.move(1,0);
+      else if (z === "rotate") this.rotate(1);
+      else if (z === "soft-drop") this.softDropping = true;
     };
-
     const onPointerUp = (e) => {
       if (!swipeStart) return;
       const dx = e.clientX - swipeStart.x;
       const dy = e.clientY - swipeStart.y;
       const magX = Math.abs(dx), magY = Math.abs(dy);
-      const dt = performance.now() - swipeStart.t;
-
-      if (dt < 200 && magX < 20 && magY < 20) {
-        // Simple tap -> Handled by hold check in Down, or potentially other taps
-      } else if (magX > magY && magX > 30) {
-        // Horizontal Swipe: Left/Right move
-        if (dx > 0) this.move(1, 0); else this.move(-1, 0);
-      } else if (magY > magX && magY > 30) {
-        // Vertical Swipe: Up (Rotate) or Down (Hard Drop)
-        if (dy < 0) this.rotate(1); // Swipe Up -> Rotate
-        else this.hardDrop(); // Swipe Down -> Drop (Hard Drop as requested)
+      if (!zoneAction(swipeStart.el)) {
+        if (magX > magY && magX > 24) {
+          if (dx > 0) this.move(1,0); else this.move(-1,0);
+        } else if (magY > 28) {
+          if (dy > 0) this.softDropping = true; else this.rotate(1);
+        } else {
+          this.rotate(1);
+        }
       }
-      
+      this.softDropping = false;
       swipeStart = null;
     };
-
     touchpad.addEventListener("pointerdown", onPointerDown);
     touchpad.addEventListener("pointerup", onPointerUp);
     touchpad.addEventListener("pointerleave", () => { this.softDropping = false; swipeStart = null; });
-    
-    // Explicitly handle touch for better mobile response
-    touchpad.addEventListener("touchstart", (e) => {
-      const t = e.changedTouches[0];
-      onPointerDown({ clientX: t.clientX, clientY: t.clientY, target: e.target });
-    }, { passive: true });
-    
-    touchpad.addEventListener("touchend", (e) => {
-      const t = e.changedTouches[0];
-      onPointerUp({ clientX: t.clientX, clientY: t.clientY, target: e.target });
-    }, { passive: true });
+    if (!window.PointerEvent) {
+      const touchStart = (e) => {
+        const t = e.changedTouches[0];
+        onPointerDown({ clientX: t.clientX, clientY: t.clientY, target: e.target });
+      };
+      const touchEnd = (e) => {
+        const t = e.changedTouches[0];
+        onPointerUp({ clientX: t.clientX, clientY: t.clientY, target: e.target });
+      };
+      touchpad.addEventListener("touchstart", touchStart, { passive: true });
+      touchpad.addEventListener("touchend", touchEnd, { passive: true });
+      touchpad.addEventListener("touchcancel", () => { this.softDropping = false; swipeStart = null; }, { passive: true });
+    }
   }
   generateUnlockOptions(count = 3) {
     const available = Object.keys(PIECES).filter(p => !this.currentPool.includes(p));

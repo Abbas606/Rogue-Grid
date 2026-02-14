@@ -6,11 +6,6 @@
   <title>Rogue Grid</title>
   <link rel="preload" href="styles.css" as="style">
   <link rel="stylesheet" href="styles.css">
-  <script>
-    if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 768) {
-      window.location.href = "mobile.html";
-    }
-  </script>
 </head>
 <body>
   <main id="app">
@@ -130,6 +125,15 @@
           <div id="warning-banner" aria-live="polite" aria-atomic="true"></div>
         </aside>
       </section>
+      <section id="touchpad" aria-label="Touch controls">
+        <div class="zone left" data-action="left"></div>
+        <div class="zone rotate" data-action="rotate"></div>
+        <div class="zone right" data-action="right"></div>
+        <div class="zone drop" data-action="soft-drop"></div>
+      </section>
+      <footer class="bottombar">
+        <a href="gallery.html" class="control-btn">Polyomino Gallery</a>
+      </footer>
       <div id="overlay" aria-hidden="true">
         <div class="overlay-inner">
           <div class="overlay-title">Game Over</div>
@@ -174,7 +178,6 @@
     </div>
   </main>
   <script src="pieces.js" defer></script>
-  <script src="core.js" defer></script>
   <script src="script.js" defer></script>
 </body>
 <noscript>This game requires JavaScript enabled.</noscript>

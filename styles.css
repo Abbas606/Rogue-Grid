@@ -600,6 +600,138 @@ select {
 }
 
 #touchpad {
-  display: none;
+  margin-top: 24px;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-rows: 60px 80px;
+  grid-template-areas:
+    "left rotate right"
+    "drop drop drop";
+  gap: 8px;
+  width: 100%;
+  max-width: 400px;
+}
+.zone {
+  background: rgba(255,255,255,0.05);
+  border: var(--border);
+  border-radius: 8px;
+}
+.zone.left { grid-area: left; }
+.zone.rotate { grid-area: rotate; }
+.zone.right { grid-area: right; }
+.zone.drop { grid-area: drop; }
+.zone.hold { display: none; } /* Handled via on-screen button usually or hidden */
+
+@media (min-width: 768px) {
+  #touchpad { display: none; }
 }
 
+/* Button Colors and Styles */
+.main-actions {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+}
+.main-actions .control-btn {
+  flex: 1;
+}
+
+.control-btn.primary-btn {
+  background-color: #0ea5e9; /* Sky 500 */
+  color: white;
+  border: 1px solid rgba(255,255,255,0.2);
+}
+.control-btn.primary-btn:hover:not(:disabled) { background-color: #0284c7; }
+
+.control-btn.danger-btn {
+  background-color: #ef4444; /* Red 500 */
+  color: white;
+  border: 1px solid rgba(255,255,255,0.2);
+}
+.control-btn.danger-btn:hover:not(:disabled) { background-color: #dc2626; }
+
+.control-btn.clear-row { 
+  background-color: rgba(59, 130, 246, 0.2); 
+  border: 1px solid #3b82f6; 
+  color: #93c5fd; 
+}
+.control-btn.clear-row:hover:not(:disabled) { background-color: rgba(59, 130, 246, 0.4); }
+
+.control-btn.clear-col { 
+  background-color: rgba(139, 92, 246, 0.2); 
+  border: 1px solid #8b5cf6; 
+  color: #c4b5fd; 
+}
+.control-btn.clear-col:hover:not(:disabled) { background-color: rgba(139, 92, 246, 0.4); }
+
+.control-btn.clear-area { 
+  background-color: rgba(249, 115, 22, 0.2); 
+  border: 1px solid #f97316; 
+  color: #fdba74; 
+}
+.control-btn.clear-area:hover:not(:disabled) { background-color: rgba(249, 115, 22, 0.4); }
+
+.control-btn.gravity-opt { 
+  background-color: rgba(234, 179, 8, 0.2); 
+  border: 1px solid #eab308; 
+  color: #fde047; 
+}
+.control-btn.gravity-opt:hover:not(:disabled) { background-color: rgba(234, 179, 8, 0.4); }
+
+/* Responsive Layout */
+@media (max-width: 1024px) {
+  #game {
+    grid-template-columns: 220px auto;
+    grid-template-areas: 
+      "board stats"
+      "controls controls";
+  }
+  #controls-settings {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 24px;
+    display: flex;
+  }
+  .controls-card {
+    flex: 1;
+    min-width: 200px;
+  }
+}
+
+@media (max-width: 768px) {
+  #scale-root {
+    padding: 12px;
+    gap: 12px;
+  }
+  
+  #game {
+    grid-template-columns: 1fr;
+    grid-template-areas: 
+      "board"
+      "stats"
+      "controls";
+    gap: 16px;
+  }
+  
+  #preview-hold-row {
+    flex-wrap: wrap;
+  }
+  
+  #preview-wrap, #hold-wrap {
+    flex: 1 1 140px;
+  }
+  
+  .topbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  
+  .top-controls {
+    width: 100%;
+  }
+  
+  .main-actions {
+    width: 100%;
+  }
+}
