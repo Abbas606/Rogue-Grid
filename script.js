@@ -103,15 +103,29 @@ const makeCells = (container, rows, cols, cls) => {
   }
 };
 
-makeCells(boardEl, H, W, "cell");
-makeCells(previewEl, 6, 6, "preview-cell");
-makeCells(holdEl, 6, 6, "preview-cell");
+// Ensure grid helpers to avoid duplicate cells and recover from partial HTML reverts
+const ensureGrid = (container, rows, cols, cls) => {
+  if (!container) return;
+  const target = rows * cols;
+  const current = container.children.length;
+  for (let i = current; i < target; i++) {
+    const d = document.createElement("div");
+    d.className = cls;
+    // Optional data attributes for consistency
+    d.dataset.row = Math.floor(i / cols);
+    d.dataset.col = i % cols;
+    container.appendChild(d);
+  }
+};
+
+// Initialize essential grids (idempotent; safe if already present)
+ensureGrid(boardEl, H, W, "cell");
+ensureGrid(previewEl, 6, 6, "preview-cell");
+ensureGrid(holdEl, 6, 6, "preview-cell");
 const previewEl2 = byId("preview2");
-if (previewEl2) makeCells(previewEl2, 6, 6, "preview-cell");
+if (previewEl2) ensureGrid(previewEl2, 6, 6, "preview-cell");
 const previewEl3 = byId("preview3");
-if (previewEl3) makeCells(previewEl3, 6, 6, "preview-cell");
-const holdEl2 = null;
-const holdEl3 = null;
+if (previewEl3) ensureGrid(previewEl3, 6, 6, "preview-cell");
 particlesCanvas.width = boardEl.clientWidth;
 particlesCanvas.height = boardEl.clientHeight;
 particlesCtx = particlesCanvas.getContext("2d");
@@ -464,6 +478,8 @@ class Renderer {
   }
 
   drawPreview(type) {
+    // Defensive: ensure preview grid exists
+    ensureGrid(previewEl, 6, 6, "preview-cell");
     const cells = Array.from(previewEl.children);
     for (const c of cells) {
       c.style.backgroundColor = '';
@@ -983,6 +999,8 @@ class Game {
   }
   drawPieceToElement(element, type) {
     if (!element) return;
+    // Defensive: ensure a 6x6 grid exists
+    ensureGrid(element, 6, 6, "preview-cell");
     const cells = Array.from(element.children);
     for (const c of cells) c.style.backgroundColor = '';
     
@@ -2422,5 +2440,3 @@ if (resetPoolBtn && confirmOverlay) {
     });
   }
 }
-
-
