@@ -206,6 +206,24 @@ const SRS_I_LEFT = {
 
 const STANDARD_PIECES = ['I', 'O', 'T', 'L', 'J', 'S', 'Z'];
 
+const getPieceSize = (type) => {
+  const def = PIECES[type];
+  if (!def || !def.shape) return 4;
+  let size = 0;
+  for (const row of def.shape) {
+    for (const cell of row) {
+      if (cell) size++;
+    }
+  }
+  return size;
+};
+
+const getPieceWeight = (type) => {
+  const size = getPieceSize(type);
+  // Weights: Monomino (1): 10, Domino (2): 8, Tromino (3): 6, Tetromino (4): 4, Pentomino (5): 2, Hexomino (6): 1
+  return Math.max(1, 12 - (size * 2));
+};
+
 const UPGRADE_DEFS = [
   { id: 'speed_up', name: 'Speed Up', type: 'temp', weight: 3, icon: '⚡', desc: 'Increase core speed up rate each level' },
   { id: 'extra_reroll', name: 'Extra Re-roll', type: 'temp', weight: 2, icon: '🎲', desc: '+1 reroll next choice' },
@@ -234,7 +252,15 @@ const pickWeighted = (items, count) => {
   return res;
 };
 const bagRandom = (source) => {
-  const pool = [...(source || Object.keys(PIECES))];
+  const pool = [];
+  const items = source || Object.keys(PIECES);
+  items.forEach(type => {
+    const weight = getPieceWeight(type);
+    for (let i = 0; i < weight; i++) {
+      pool.push(type);
+    }
+  });
+  
   for (let i = pool.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [pool[i], pool[j]] = [pool[j], pool[i]];
@@ -1317,12 +1343,23 @@ class Game {
     if (available.length === 0) return [];
 
     const options = [];
-    const pool = [...available];
+    const pool = [];
+    available.forEach(type => {
+      const weight = getPieceWeight(type);
+      for (let i = 0; i < weight; i++) {
+        pool.push(type);
+      }
+    });
+
     for (let i = 0; i < count; i++) {
       if (pool.length === 0) break;
       const idx = Math.floor(Math.random() * pool.length);
-      options.push(pool[idx]);
-      pool.splice(idx, 1);
+      const selected = pool[idx];
+      options.push(selected);
+      // Remove all instances of this piece from the pool to avoid duplicates in the same choice set
+      for (let j = pool.length - 1; j >= 0; j--) {
+        if (pool[j] === selected) pool.splice(j, 1);
+      }
     }
     return options;
   }
@@ -1935,6 +1972,10 @@ class Game {
 
   finishPieceRemoval(type) {
     this.currentPool = this.currentPool.filter(p => p !== type);
+    // Also remove from permanent pool to persist across runs
+    this.permanentPool = this.permanentPool.filter(p => p !== type);
+    this.savePool();
+
     this.removedPieces.push(type);
     this.updatePoolDisplay();
     achievementsEl.textContent = `Removed ${type}`;
