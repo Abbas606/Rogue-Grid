@@ -427,12 +427,12 @@ class Renderer {
         if (v) {
           if (v === 'OB2' || v === 'OB1') {
             el.classList.add('obstacle-cell');
-            el.style.setProperty('--cell-color', v === 'OB2' ? '#6b7280' : '#9ca3af');
+            el.style.backgroundColor = v === 'OB2' ? '#6b7280' : '#9ca3af';
           } else {
-            el.style.setProperty('--cell-color', PIECES[v].color);
+            el.style.backgroundColor = PIECES[v].color;
           }
         } else {
-          el.style.removeProperty('--cell-color');
+          el.style.backgroundColor = '';
         }
       }
     }
@@ -454,10 +454,9 @@ class Renderer {
       if (r >= 0 && r < H && c >= 0 && c < W) {
         if (!this.board.grid[r][c]) {
           const i = this.idx(r,c);
-          const el = this.cells[i];
-          el.style.setProperty('--cell-color', color);
-          el.style.opacity = '0.28';
-          el.classList.add("ghost");
+          this.cells[i].style.backgroundColor = color;
+          this.cells[i].style.opacity = '0.28';
+          this.cells[i].classList.add("ghost");
           this.prevGhostIdx.push(i);
         }
       }
@@ -466,7 +465,6 @@ class Renderer {
   drawActive(piece) {
     for (const i of this.prevActiveIdx) {
       this.cells[i].classList.remove("active");
-      this.cells[i].style.removeProperty('--cell-color');
     }
     this.prevActiveIdx.length = 0;
     const color = PIECES[piece.type].color;
@@ -474,9 +472,8 @@ class Renderer {
       const r = piece.y + dy, c = piece.x + dx;
       if (r >= 0 && r < H && c >= 0 && c < W) {
         const i = this.idx(r,c);
-        const el = this.cells[i];
-        el.classList.add("active");
-        el.style.setProperty('--cell-color', color);
+        this.cells[i].classList.add("active");
+        this.cells[i].style.backgroundColor = color;
         this.prevActiveIdx.push(i);
       }
     }
@@ -511,7 +508,7 @@ class Renderer {
     ensureGrid(previewEl, 6, 6, "preview-cell");
     const cells = Array.from(previewEl.children);
     for (const c of cells) {
-      c.style.removeProperty('--cell-color');
+      c.style.backgroundColor = '';
     }
     if (!type) {
       previewEl.style.opacity = "0";
@@ -531,7 +528,7 @@ class Renderer {
       for (let c = 0; c < w; c++) {
         if (shape[r][c]) {
           const idx = (startY + r) * 6 + (startX + c);
-          cells[idx].style.setProperty('--cell-color', color);
+          cells[idx].style.backgroundColor = color;
         }
       }
     }
@@ -734,9 +731,8 @@ class Game {
         const cellDiv = document.createElement('div');
         cellDiv.style.width = `${blockSize}px`;
         cellDiv.style.height = `${blockSize}px`;
-        cellDiv.className = 'mini-cell';
         if (cell) {
-          cellDiv.style.setProperty('--cell-color', p.color);
+          cellDiv.style.backgroundColor = p.color;
         }
         grid.appendChild(cellDiv);
       });
@@ -1032,7 +1028,7 @@ class Game {
     // Defensive: ensure a 6x6 grid exists
     ensureGrid(element, 6, 6, "preview-cell");
     const cells = Array.from(element.children);
-    for (const c of cells) c.style.removeProperty('--cell-color');
+    for (const c of cells) c.style.backgroundColor = '';
     
     if (type) {
       const piece = new Piece(type);
@@ -1046,7 +1042,7 @@ class Game {
         for (let c = 0; c < w; c++) {
           if (shape[r][c]) {
             const idx = (startY + r) * 6 + (startX + c);
-            if (cells[idx]) cells[idx].style.setProperty('--cell-color', color);
+            if (cells[idx]) cells[idx].style.backgroundColor = color;
           }
         }
       }
