@@ -1225,9 +1225,30 @@ class Game {
 
   bindInput() {
     window.addEventListener("keydown", (e) => {
+      const code = e.code;
+      
+      // Global controls (Restart and Pause/Start)
+      if (code === "KeyR") {
+        e.preventDefault();
+        if (topRestartBtn) topRestartBtn.click();
+        else this.start();
+        return;
+      }
+      if (code === "KeyP") {
+        e.preventDefault();
+        if (startPauseBtn) startPauseBtn.click();
+        return;
+      }
+
       if (this.state !== "playing") return;
       if (this.isPaused) return;
-      const code = e.code;
+
+      // Consumables (1-4)
+      if (code === "Digit1") { e.preventDefault(); this.useClearRow(); }
+      else if (code === "Digit2") { e.preventDefault(); this.useClearColumn(); }
+      else if (code === "Digit3") { e.preventDefault(); this.useClearArea(); }
+      else if (code === "Digit4") { e.preventDefault(); this.useGravity(); }
+
       const match = (name) => {
         const list = this.keyBindings[name];
         return list && list.includes(code);
